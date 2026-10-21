@@ -1,6 +1,7 @@
 {
   "name": "tabquest",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bun --bun vite dev --host 127.0.0.1 --port 46533 --strictPort",

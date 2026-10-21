@@ -1,14 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>Tabquest</title>
+  <defs>
+    <g id="coin">
+      <circle cx="32" cy="33" r="20" fill="#f5b942" />
+      <circle cx="32" cy="33" r="14" fill="none" stroke="#b7791f" stroke-width="2.5" />
+      <path d="M32 23.5l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4-5.7-3.1-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8Z" fill="#b7791f" />
+    </g>
+    <clipPath id="left"><rect x="0" y="0" width="32" height="64" /></clipPath>
+    <clipPath id="right"><rect x="32" y="0" width="32" height="64" /></clipPath>
+  </defs>
   <rect width="64" height="64" rx="14" fill="#14532d" />
-  <g transform="rotate(-5 30.5 53)">
-    <path d="M12 10h18.5v43l-4.6-4-4.6 4-4.7-4-4.6 4Z" fill="#f7f7f2" />
-    <path d="M17 19h9M17 26.5h9M17 34h6" stroke="#14532d" stroke-width="3" stroke-linecap="round" />
-  </g>
-  <g transform="rotate(5 33.5 53)">
-    <path d="M33.5 10H52v43l-4.6-4-4.7 4-4.6-4-4.6 4Z" fill="#f7f7f2" />
-    <path d="M38 19h9M38 26.5h9" stroke="#14532d" stroke-width="3" stroke-linecap="round" />
-  </g>
-  <circle cx="46" cy="46" r="10.5" fill="#f5b942" stroke="#14532d" stroke-width="3.5" />
-  <circle cx="46" cy="46" r="5" fill="none" stroke="#b7791f" stroke-width="2.5" />
+  <g transform="translate(-3 2.5)" clip-path="url(#left)"><use href="#coin" /></g>
+  <g transform="translate(3 -2.5)" clip-path="url(#right)"><use href="#coin" /></g>
+  <path d="M51 8.5l1.3 3.2 3.2 1.3-3.2 1.3-1.3 3.2-1.3-3.2-3.2-1.3 3.2-1.3Z" fill="#f7f7f2" />
+  <path d="M12.5 49l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9Z" fill="#f7f7f2" />
 </svg>
