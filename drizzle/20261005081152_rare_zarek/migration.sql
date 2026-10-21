@@ -1,0 +1,1 @@
+ALTER TABLE `items` ADD `bundle_size` integer DEFAULT 1 NOT NULL;

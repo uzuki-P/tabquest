@@ -1,0 +1,1 @@
+ALTER TABLE `payment_statuses` ADD `paid_amount` integer;

@@ -1,0 +1,39 @@
+# Tabquest admin runtime as a rootless podman container.
+# Serves public + admin routes on host loopback 54096, proxied only by
+# Tailscale Serve. Applies pending migrations at startup; the public unit
+# orders itself after this one and gates on its healthy state via
+# Notify=healthy, mirroring deploy/tabquest-admin.service.
+[Unit]
+Description=Tabquest admin runtime (podman)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=localhost/tabquest:latest
+ContainerName=tabquest-admin
+Exec=bun run scripts/serve.ts
+EnvironmentFile=/srv/tabquest/.env
+Environment=TABQUEST_RUNTIME=admin
+Environment=TABQUEST_HOST=0.0.0.0
+Environment=TABQUEST_PORT=54096
+Environment=TABQUEST_DATABASE_URL=file:/app/data/tabquest.db
+Environment=TABQUEST_UPLOAD_DIR=/app/data/uploads
+# Trust Tailscale identity headers: this port is proxied only by Tailscale Serve.
+Environment=TABQUEST_TRUST_TAILSCALE_HEADERS=true
+# Lowercase :z (shared label): two containers mount this directory, so a
+# per-container :Z relabel would break the other one's WAL locks.
+Volume=/srv/tabquest/data:/app/data:z
+PublishPort=127.0.0.1:54096:54096
+HealthCmd=bun -e "await fetch('http://127.0.0.1:54096/')"
+HealthInterval=15s
+HealthStartPeriod=10s
+HealthRetries=3
+HealthTimeout=5s
+Notify=healthy
+
+[Service]
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

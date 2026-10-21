@@ -1,0 +1,455 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/* --- Brand presets --------------------------------------------------- */
+/* Brand choices rotate one accent hue across both modes. Semantic colors
+   stay fixed: destructive is red, success is green, and medal colors mark
+   rankings. Keep the ids in sync with brand-picker.tsx and __root.tsx. */
+:root {
+  --brand-hue: 325.653;
+  --arena-cursor-ibeam:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='28' viewBox='0 0 7 14' shape-rendering='crispEdges'%3E%3Cpath d='M1,0 L6,0 L6,3 L5,3 L5,11 L6,11 L6,14 L1,14 L1,11 L2,11 L2,3 L1,3 Z' fill='%23ffffff'/%3E%3Cpath d='M2,1 L5,1 L5,2 L4,2 L4,12 L5,12 L5,13 L2,13 L2,12 L3,12 L3,2 L2,2 Z' fill='%23171412'/%3E%3C/svg%3E")
+      7 14,
+    text;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%23e75b8d' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="red"] {
+  --brand-hue: 354.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%23ed5f4f' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="orange"] {
+  --brand-hue: 20.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%23de7200' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="forest"] {
+  --brand-hue: 110.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%2338af46' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="teal"] {
+  --brand-hue: 150.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%2300aa9d' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="azure"] {
+  --brand-hue: 195.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%2300a1d5' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="violet"] {
+  --brand-hue: 255.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%23957bf8' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+:root[data-brand="magenta"] {
+  --brand-hue: 295.069;
+  --arena-cursor-hand:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath d='M2,0 L5,0 L5,3 L9,3 L9,7 L8,7 L8,8 L7,8 L7,9 L3,9 L3,8 L2,8 L2,7 L1,7 L1,3 L2,3 Z' fill='%23ce64c7' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+      3 1,
+    pointer;
+}
+
+/* Roles beyond the shadcn set. --success marks money-positive states only
+   (paid, saved, rounded up). --gold, --silver, and --bronze are celebration
+   only (crowns, podium, tips, round-ups, rank watermarks). Feature
+   components must use these tokens instead of raw emerald/green/amber/slate
+   classes so each hue keeps a single meaning; the token flips per theme, so
+   one class replaces the light/dark class pairs. */
+/* Shared palette for both runtimes. Neutral surfaces carry the page;
+   the chosen brand hue marks actions and key values. */
+:root {
+  --background: oklch(0.972 0.006 var(--brand-hue));
+  --foreground: oklch(0.265 0.014 var(--brand-hue));
+  --card: oklch(0.992 0.004 var(--brand-hue));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.79 0.085 var(--brand-hue));
+  --primary-foreground: oklch(0.22 0.018 var(--brand-hue));
+  --secondary: oklch(0.93 0.014 var(--brand-hue));
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.937 0.008 var(--brand-hue));
+  --muted-foreground: oklch(0.43 0.013 var(--brand-hue));
+  --accent: oklch(0.94 0.025 var(--brand-hue));
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.77 0.012 var(--brand-hue));
+  --input: oklch(0.74 0.012 var(--brand-hue));
+  --ring: oklch(0.49 0.105 var(--brand-hue));
+  --radius: 0.125rem;
+  --arena-line: oklch(0.55 0.014 var(--brand-hue));
+  --arena-ink: oklch(0.31 0.02 var(--brand-hue));
+  --arena-paper: oklch(0.97 0.006 var(--brand-hue));
+  --arena-paper-muted: oklch(0.86 0.014 var(--brand-hue));
+  --arena-shadow: oklch(0.55 0.012 var(--brand-hue) / 0.24);
+  --arena-accent: oklch(0.43 0.12 var(--brand-hue));
+  --arena-accent-ink: oklch(0.84 0.09 var(--brand-hue));
+  --destructive: oklch(0.627117 0.248974 27.325);
+  --success: oklch(0.508 0.118 166);
+  --gold: oklch(0.666 0.157 60);
+  --silver: oklch(0.717 0.022 257);
+  --bronze: oklch(0.673 0.107 55);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --arena-gold-ink: oklch(0.828 0.157 84);
+  --arena-silver-ink: oklch(0.87 0.014 257);
+  --arena-bronze-ink: oklch(0.772 0.096 70);
+  --arena-success-ink: oklch(0.765 0.177 163);
+}
+
+.dark {
+  --background: oklch(0.205 0.009 var(--brand-hue));
+  --foreground: oklch(0.92 0.006 var(--brand-hue));
+  --card: oklch(0.255 0.01 var(--brand-hue));
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.285 0.01 var(--brand-hue));
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.48 0.11 var(--brand-hue));
+  --primary-foreground: oklch(0.98 0.003 var(--brand-hue));
+  --secondary: oklch(0.325 0.016 var(--brand-hue));
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.34 0.012 var(--brand-hue));
+  --muted-foreground: oklch(0.79 0.012 var(--brand-hue));
+  --accent: oklch(0.36 0.035 var(--brand-hue));
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.48 0.012 var(--brand-hue));
+  --input: oklch(0.5 0.014 var(--brand-hue));
+  --ring: oklch(0.77 0.09 var(--brand-hue));
+  --arena-line: oklch(0.59 0.012 var(--brand-hue));
+  --arena-ink: oklch(0.16 0.012 var(--brand-hue));
+  --arena-paper: oklch(0.94 0.006 var(--brand-hue));
+  --arena-paper-muted: oklch(0.84 0.012 var(--brand-hue));
+  --arena-shadow: oklch(0.07 0.01 var(--brand-hue) / 0.3);
+  --arena-accent: oklch(0.82 0.08 var(--brand-hue));
+  --arena-accent-ink: oklch(0.84 0.09 var(--brand-hue));
+  --destructive: oklch(0.458704 0.169677 27.325);
+  --success: oklch(0.765 0.177 163);
+  --gold: oklch(0.828 0.157 84);
+  --silver: oklch(0.87 0.014 257);
+  --bronze: oklch(0.772 0.096 70);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+@theme inline {
+  --font-sans: "Noto Sans Variable", sans-serif;
+  --font-heading: "Geist Variable", sans-serif;
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.45;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-gold: var(--gold);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
+  --color-arena-line: var(--arena-line);
+  --color-arena-ink: var(--arena-ink);
+  --color-arena-paper: var(--arena-paper);
+  --color-arena-paper-muted: var(--arena-paper-muted);
+  --color-arena-shadow: var(--arena-shadow);
+  --color-arena-accent: var(--arena-accent);
+  --color-arena-accent-ink: var(--arena-accent-ink);
+  --color-arena-gold-ink: var(--arena-gold-ink);
+  --color-arena-silver-ink: var(--arena-silver-ink);
+  --color-arena-bronze-ink: var(--arena-bronze-ink);
+  --color-arena-success-ink: var(--arena-success-ink);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Restore the original pixel cursors. Keep native touch behavior and avoid
+   replacing disabled or specialized cursors. */
+@media (hover: hover) and (pointer: fine) {
+  body {
+    cursor:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='24' viewBox='0 0 9 12' shape-rendering='crispEdges'%3E%3Cpath d='M1,0 L1,11 L3,9 L5,12 L7,11 L5,7 L8,7 Z' fill='%23171412' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")
+        1 0,
+      auto;
+  }
+
+  body
+    :is(
+      a,
+      button:not(:disabled),
+      summary,
+      [role="button"]:not([aria-disabled="true"])
+    ) {
+    cursor: var(--arena-cursor-hand);
+  }
+
+  body
+    :is(
+      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+      textarea,
+      [contenteditable="true"]
+    ) {
+    cursor: var(--arena-cursor-ibeam);
+  }
+}
+
+/* --- Arena home motion ---------------------------------------------- */
+/* The home board deals in on load and re-deals when the month changes.
+   The entrances are pure CSS so the page still reads with JavaScript
+   disabled; reduced-motion users get the finished board at once. Elements
+   opt in with an arena-* class and stagger themselves via --anim-delay.
+   The rupiah tally count-up in month-leaderboard.tsx is the one JS-driven
+   piece (motion values), and it renders final figures without JS. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes arena-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes arena-deal {
+    0% {
+      opacity: 0;
+      transform: translateY(16px) scale(0.98);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes arena-slide {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+  }
+  @keyframes arena-sweep-x {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes arena-sweep-y {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  @keyframes arena-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+  }
+  @keyframes arena-nudge {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(4px);
+    }
+  }
+  @keyframes arena-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-16px) rotate(-18deg);
+    }
+  }
+  @keyframes arena-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2.5px);
+    }
+  }
+
+  .arena-rise {
+    animation: arena-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  .arena-deal {
+    animation: arena-deal 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  .arena-slide {
+    animation: arena-slide 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  .arena-pop {
+    animation: arena-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  .arena-nudge {
+    animation: arena-nudge 0.45s ease-in-out 0.6s both;
+  }
+  .arena-sweep-x {
+    transform-origin: left;
+    animation: arena-sweep-x 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  .arena-sweep-y {
+    transform-origin: bottom;
+    animation: arena-sweep-y 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--anim-delay, 0s);
+  }
+  /* Drops in once, then idles; marks the reigning #1. */
+  .arena-drop-bob {
+    animation:
+      arena-drop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s both,
+      arena-bob 2.4s ease-in-out 1.05s infinite;
+  }
+}
+
+/* Shared finishing rules for the public board and the admin workspace. */
+.public-site .border-2 {
+  border-width: 1px;
+}
+
+.admin-site main {
+  padding-block: clamp(1.5rem, 4vw, 3rem);
+}
+
+.admin-site main h1 {
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  text-transform: uppercase;
+}
+
+.admin-site [data-slot="table-head"] {
+  background: var(--muted);
+  border-bottom: 1px solid var(--arena-line);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-site [data-slot="table-row"] {
+  transition: background-color 180ms ease;
+}
+
+.admin-site [data-slot="table-row"]:hover {
+  background: var(--accent);
+}
+
+:where(.public-site, .admin-site)
+  :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .admin-site main {
+    animation: arena-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .admin-site [data-slot="card"] {
+    animation: arena-rise 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 80ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.public-site, .admin-site) *,
+  :where(.public-site, .admin-site) *::before,
+  :where(.public-site, .admin-site) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

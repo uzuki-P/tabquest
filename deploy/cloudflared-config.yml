@@ -1,0 +1,20 @@
+# Named Cloudflare Tunnel configuration for the public hostname.
+# Replace TUNNEL_ID and tabquest.example.com before use, then validate with:
+#   cloudflared tunnel ingress validate --config deploy/cloudflared-config.yml
+#
+# Rules are evaluated in order and the final catch-all is required by
+# Cloudflare. Only the public hostname routes to the public process; the
+# admin port has no ingress rule at all.
+tunnel: TUNNEL_ID
+credentials-file: /etc/cloudflared/TUNNEL_ID.json
+
+ingress:
+  - hostname: tabquest.example.com
+    service: http://127.0.0.1:48781
+    originRequest:
+      # Public requests are read-only; keep origin work cheap.
+      connectTimeout: 10s
+      noTLSVerify: true
+      httpHostHeader: tabquest.example.com
+  # Required catch-all: anything else gets a local 404, never the app.
+  - service: http_status:404

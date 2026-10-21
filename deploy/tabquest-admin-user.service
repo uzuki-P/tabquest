@@ -1,0 +1,21 @@
+# Install as ~/.config/systemd/user/tabquest-admin.service on the production host.
+[Unit]
+Description=Tabquest admin runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory=/srv/tabquest
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TABQUEST_RUNTIME=admin
+Environment=TABQUEST_HOST=127.0.0.1
+Environment=TABQUEST_PORT=54096
+Environment=TABQUEST_UPLOAD_DIR=/srv/tabquest/data/uploads
+Environment=TABQUEST_TRUST_TAILSCALE_HEADERS=true
+EnvironmentFile=%h/.config/tabquest/admin.env
+ExecStart=/usr/local/bin/bun run scripts/serve.ts
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,19 @@
+# Build context exclusions for `podman build -f deploy/Containerfile .`
+# The image builds from the lockfile and sources; secrets, data, and local
+# build output never enter the context.
+.git
+.scratch
+.tanstack
+.env
+.env.*
+node_modules
+dist
+data
+deploy
+!deploy/backup.ts
+docs
+test
+*.md
+billsplit.py
+items.json
+people.txt

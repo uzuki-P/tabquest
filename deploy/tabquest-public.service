@@ -1,0 +1,35 @@
+# Tabquest public process.
+# Serves public routes only; every admin page and mutation returns 404 before
+# route handling. cloudflared connects to this port and nothing else.
+# ExecStart pins the tested Bun release (1.4.0); see deploy/README.md.
+[Unit]
+Description=Tabquest public runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tabquest
+Group=tabquest
+WorkingDirectory=/opt/tabquest
+ExecStart=/opt/bun-1.4.0/bin/bun run scripts/serve.ts
+Environment=TABQUEST_RUNTIME=public
+Environment=TABQUEST_HOST=127.0.0.1
+Environment=TABQUEST_PORT=48781
+Environment=TABQUEST_UPLOAD_DIR=/var/lib/tabquest/uploads
+# Database target: TABQUEST_DATABASE_URL and a read-only
+# TABQUEST_DATABASE_AUTH_TOKEN live in a root-only env file, not in this unit.
+EnvironmentFile=/etc/tabquest/public.env
+Environment=TABQUEST_TRUST_TAILSCALE_HEADERS=false
+Restart=on-failure
+RestartSec=2
+
+# Hardening: the public runtime only needs database and image read access.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/tabquest /opt/tabquest
+
+[Install]
+WantedBy=multi-user.target

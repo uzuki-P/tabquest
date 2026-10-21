@@ -1,0 +1,24 @@
+# Tabquest runtime image, used by the quadlets in deploy/quadlets/.
+# Stage 1 builds the vite bundle; stage 2 ships the runtime: built dist,
+# the server entry (scripts/serve.ts + src/server), migrations, and
+# production dependencies. Both runtimes share this one image and differ
+# only by TABQUEST_RUNTIME (see the quadlet units).
+
+# Keep in sync with the pinned Bun release in deploy/README.md.
+FROM docker.io/oven/bun:1.4.0 AS build
+WORKDIR /app
+COPY package.json bun.lock bunfig.toml ./
+RUN bun install --frozen-lockfile
+COPY . .
+RUN bun run build
+
+FROM docker.io/oven/bun:1.4.0
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json bun.lock bunfig.toml ./
+RUN bun install --frozen-lockfile --production
+COPY --from=build /app/dist ./dist
+COPY scripts ./scripts
+COPY src ./src
+COPY drizzle ./drizzle
+CMD ["bun", "run", "scripts/serve.ts"]

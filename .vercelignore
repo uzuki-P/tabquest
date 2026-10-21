@@ -1,0 +1,9 @@
+# Source uploads only matter for remote builds; publish.ts deploys prebuilt
+# output and carries the snapshot inside the function bundle itself.
+data/
+.scratch/
+test/
+docs/
+dist/
+.tanstack/
+.zcode/

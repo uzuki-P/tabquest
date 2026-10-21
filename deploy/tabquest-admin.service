@@ -1,0 +1,37 @@
+# Tabquest admin process.
+# Serves public + admin routes on loopback, behind Tailscale Serve only.
+# ExecStart pins the tested Bun release (1.4.0); install versioned copies
+# under /opt (see deploy/README.md section 1) and bump deliberately.
+[Unit]
+Description=Tabquest admin runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tabquest
+Group=tabquest
+WorkingDirectory=/opt/tabquest
+ExecStart=/opt/bun-1.4.0/bin/bun run scripts/serve.ts
+Environment=TABQUEST_RUNTIME=admin
+Environment=TABQUEST_HOST=127.0.0.1
+Environment=TABQUEST_PORT=54096
+Environment=TABQUEST_UPLOAD_DIR=/var/lib/tabquest/uploads
+# Database target: TABQUEST_DATABASE_URL (libsql:// for Turso) and the write
+# TABQUEST_DATABASE_AUTH_TOKEN live in a root-only env file, not in this unit.
+EnvironmentFile=/etc/tabquest/admin.env
+# Trust Tailscale identity headers: this port is proxied only by Tailscale Serve.
+Environment=TABQUEST_TRUST_TAILSCALE_HEADERS=true
+Restart=on-failure
+RestartSec=2
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tabquest
+ReadOnlyPaths=/opt/tabquest
+
+[Install]
+WantedBy=multi-user.target

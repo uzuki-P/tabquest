@@ -1,0 +1,37 @@
+# Tabquest public runtime as a rootless podman container.
+# Serves public routes only; every admin page and mutation returns 404
+# before route handling. cloudflared connects to loopback 48781 and nothing
+# else, mirroring deploy/tabquest-public.service. Data mounts read-only and
+# startup waits for the admin unit (which migrates the database).
+[Unit]
+Description=Tabquest public runtime (podman)
+Wants=network-online.target tabquest-admin.service
+After=network-online.target tabquest-admin.service
+
+[Container]
+Image=localhost/tabquest:latest
+ContainerName=tabquest-public
+Exec=bun run scripts/serve.ts
+EnvironmentFile=/srv/tabquest/.env
+Environment=TABQUEST_RUNTIME=public
+Environment=TABQUEST_HOST=0.0.0.0
+Environment=TABQUEST_PORT=48781
+Environment=TABQUEST_DATABASE_URL=file:/app/data/tabquest.db
+Environment=TABQUEST_UPLOAD_DIR=/app/data/uploads
+Environment=TABQUEST_TRUST_TAILSCALE_HEADERS=false
+# Read-only and :z (shared label) — see the note in tabquest-admin.container.
+Volume=/srv/tabquest/data:/app/data:ro,z
+PublishPort=127.0.0.1:48781:48781
+HealthCmd=bun -e "await fetch('http://127.0.0.1:48781/')"
+HealthInterval=15s
+HealthStartPeriod=10s
+HealthRetries=3
+HealthTimeout=5s
+Notify=healthy
+
+[Service]
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
