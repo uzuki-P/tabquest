@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react"
 import { afterEach, describe, expect, test } from "bun:test"
 
-import { PublishCommand } from "./publish-command"
+import { PROJECT_ROOT, PublishCommand } from "./publish-command"
 
 afterEach(cleanup)
 
@@ -36,9 +36,7 @@ describe("publish command chip", () => {
 
     // The pasted command must not depend on the shell's current directory.
     await waitFor(() =>
-      expect(writes).toEqual([
-        "cd /srv/tabquest && just publish",
-      ])
+      expect(writes).toEqual([`cd ${PROJECT_ROOT} && just publish`])
     )
 
     // The copied state reads at a glance: success green border and text.

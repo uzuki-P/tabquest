@@ -34,7 +34,10 @@ const uploadDir = path.resolve(
   arg("uploads", process.env.TABQUEST_UPLOAD_DIR ?? "./data/uploads")
 )
 const stageDir = path.join(projectRoot, "deploy", "snapshot")
-const productionUrl = "https://tabquest.vercel.app"
+// The public production origin, for the post-deploy image check. Set
+// VITE_TABQUEST_PUBLIC_ORIGIN in .env.local; the Vercel alias is the fallback.
+const productionUrl =
+  process.env.VITE_TABQUEST_PUBLIC_ORIGIN || "https://tabquest.vercel.app"
 const preview = process.argv.includes("--preview")
 const stageOnly = process.argv.includes("--stage-only")
 

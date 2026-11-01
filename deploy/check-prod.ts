@@ -106,6 +106,17 @@ if (existsSync(localEnv)) {
     )
   }
 }
+// The admin build compiles these into its links (src/lib/urls.ts); without
+// them it would ship placeholder hostnames. Bun loads them from .env.local.
+for (const name of [
+  "VITE_TABQUEST_PUBLIC_ORIGIN",
+  "VITE_TABQUEST_ADMIN_ORIGIN",
+  "VITE_TABQUEST_PROJECT_ROOT",
+]) {
+  if (!process.env[name]) {
+    throw new Error(`Set ${name} in the main checkout .env.local.`)
+  }
+}
 await verifyImages(path.join(checkout, "data/uploads"))
 console.log(
   "[update-prod] main checkout, Turso admin config, and images verified"

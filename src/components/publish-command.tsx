@@ -15,8 +15,12 @@ import { cn } from "@/lib/utils"
  * check for a few seconds so a paste-ready copy is obvious at a glance.
  */
 
-/** This checkout, per deploy/README.md: the admin host service runs here. */
-const PROJECT_ROOT = "/srv/tabquest"
+/**
+ * The main checkout the admin host service runs from (deploy/README.md).
+ * Set VITE_TABQUEST_PROJECT_ROOT in .env.local to the real path.
+ */
+export const PROJECT_ROOT: string =
+  import.meta.env.VITE_TABQUEST_PROJECT_ROOT || "/srv/tabquest"
 
 /** What the chip displays (the nav has no room for the full command). */
 const LABEL = "just publish"

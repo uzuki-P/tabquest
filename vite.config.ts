@@ -1,5 +1,5 @@
 import path from "node:path"
-import { defineConfig } from "vite"
+import { defineConfig, loadEnv } from "vite"
 import type { Plugin } from "vite"
 import { devtools } from "@tanstack/devtools-vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
@@ -31,14 +31,39 @@ function generateServerFnId({
 /**
  * The tailnet hostnames the dev-router publishes for each dev runtime
  * (see the `dev:public` / `dev:admin` scripts and `just specific` routes).
+ * Real hostnames come from the untracked .env.local.
  */
 const DEV_ROUTES = {
-  admin: { port: 46533, url: "https://tabquest-dev.example.ts.net" },
+  admin: {
+    port: 46533,
+    url:
+      process.env.TABQUEST_DEV_ADMIN_URL ||
+      "https://tabquest-dev.example.ts.net",
+  },
   public: {
     port: 46534,
-    url: "https://tabquest-dev-public.example.ts.net",
+    url:
+      process.env.TABQUEST_DEV_PUBLIC_URL ||
+      "https://tabquest-dev-public.example.ts.net",
   },
 } as const
+
+/**
+ * Public and admin origins are compiled into the client (src/lib/urls.ts).
+ * A Vercel build without them would ship placeholder links, so refuse it.
+ */
+function requireDeployedOrigins(mode: string) {
+  const env = loadEnv(mode, process.cwd(), "VITE_TABQUEST_")
+  const missing = [
+    "VITE_TABQUEST_PUBLIC_ORIGIN",
+    "VITE_TABQUEST_ADMIN_ORIGIN",
+  ].filter((name) => !env[name])
+  if (missing.length) {
+    throw new Error(
+      `Set ${missing.join(" and ")} in .env.local or the Vercel project environment before building the public site.`
+    )
+  }
+}
 
 /**
  * Prints the published tailnet URL under Vite's localhost banner so the
@@ -63,20 +88,21 @@ function devRouteLogger(): Plugin {
   }
 }
 
-const config = defineConfig(() => {
+const config = defineConfig(({ command, mode }) => {
   // The Vercel target compiles the server through Nitro so Vercel deploys
   // the public runtime as a function. The default target keeps producing
   // the dist/client + dist/server layout that scripts/serve.ts runs, which
   // admin needs for its Bun-only image handling.
   const vercelTarget = process.env.TABQUEST_TARGET === "vercel"
+  if (vercelTarget && command === "build") requireDeployedOrigins(mode)
   return {
     resolve: { tsconfigPaths: true },
     server: {
       // The dev servers sit behind the tailnet dev-router (publish-route),
       // so requests arrive with those hostnames instead of loopback.
       allowedHosts: [
-        "tabquest-dev.example.ts.net",
-        "tabquest-dev-public.example.ts.net",
+        new URL(DEV_ROUTES.admin.url).hostname,
+        new URL(DEV_ROUTES.public.url).hostname,
       ],
     },
     plugins: [

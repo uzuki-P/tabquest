@@ -15,6 +15,7 @@ __unconfig*
 todos.json
 
 # local data and test scratch
+.private-terms
 data/
 .scratch/
 

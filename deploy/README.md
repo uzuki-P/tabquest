@@ -73,7 +73,16 @@ One-time production setup on this host after the worktree is merged:
    The Vercel CLI commands are `vercel env add TABQUEST_DATABASE_URL production`
    and `vercel env add TABQUEST_DATABASE_AUTH_TOKEN production`.
    `deploy/publish.ts` refreshes the Vercel project settings on each run.
-5. Keep `data/uploads` in the main checkout as the production upload
+5. Put the real hostnames in the main checkout's ignored `.env.local`:
+   `VITE_TABQUEST_PUBLIC_ORIGIN`, `VITE_TABQUEST_ADMIN_ORIGIN`, and
+   `VITE_TABQUEST_PROJECT_ROOT` (see `.env.example`). Builds compile them
+   into client links, the production preflight refuses to run without them,
+   and the Vercel build refuses to run without the two origins. Add the two
+   origins to the Vercel project's Production environment as well, so
+   Git-triggered builds get them too. They stay out of the repository;
+   `just test` fails if a tracked file contains a private term (see
+   `test/private-terms.test.ts`).
+6. Keep `data/uploads` in the main checkout as the production upload
    directory. It must contain every image key for a published Turso bill.
    `just update-prod` refuses to deploy if one is missing or corrupt.
 
