@@ -88,6 +88,8 @@ restart-all:
 update-prod:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Admin applies pending migrations on restart; refuse cascading drops.
+    bun test src/db/migrations.test.ts
     bun run deploy/check-prod.ts
     bun run build
     systemctl --user restart {{admin_service}}
