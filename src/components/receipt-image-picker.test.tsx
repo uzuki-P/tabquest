@@ -111,8 +111,8 @@ test("a parse suggestion asks for review and the preview shows the censored copy
   ).toBeTruthy()
   expect(screen.getByText(/order number/)).toBeTruthy()
   expect(screen.getByRole("button", { name: "Review" })).toBeTruthy()
-  expect(
-    (screen.getByRole("button", { name: /Censor/ }) as HTMLButtonElement)
-      .disabled
-  ).toBe(false)
+  expect(screen.getByRole("button", { name: /Censor/ })).toHaveProperty(
+    "disabled",
+    false
+  )
 })

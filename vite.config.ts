@@ -31,22 +31,26 @@ function generateServerFnId({
 /**
  * The tailnet hostnames the dev-router publishes for each dev runtime
  * (see the `dev:public` / `dev:admin` scripts and `just specific` routes).
- * Real hostnames come from the untracked .env.local.
+ * Real hostnames come from the untracked .env.local. Read through loadEnv
+ * rather than process.env: only Bun loads .env.local into process.env, and
+ * Vite may run under Node.
  */
-const DEV_ROUTES = {
-  admin: {
-    port: 46533,
-    url:
-      process.env.TABQUEST_DEV_ADMIN_URL ||
-      "https://tabquest-dev.example.ts.net",
-  },
-  public: {
-    port: 46534,
-    url:
-      process.env.TABQUEST_DEV_PUBLIC_URL ||
-      "https://tabquest-dev-public.example.ts.net",
-  },
-} as const
+function devRoutes(mode: string) {
+  const env = loadEnv(mode, process.cwd(), "TABQUEST_DEV_")
+  return {
+    admin: {
+      port: 46533,
+      url: env.TABQUEST_DEV_ADMIN_URL || "https://tabquest-dev.example.ts.net",
+    },
+    public: {
+      port: 46534,
+      url:
+        env.TABQUEST_DEV_PUBLIC_URL ||
+        "https://tabquest-dev-public.example.ts.net",
+    },
+  } as const
+}
+type DevRoutes = ReturnType<typeof devRoutes>
 
 /**
  * Public and admin origins are compiled into the client (src/lib/urls.ts).
@@ -70,9 +74,9 @@ function requireDeployedOrigins(mode: string) {
  * running log shows both addresses. Only claims the URL when the server
  * actually binds the port the route points at.
  */
-function devRouteLogger(): Plugin {
+function devRouteLogger(routes: DevRoutes): Plugin {
   const runtime = process.env.TABQUEST_RUNTIME === "public" ? "public" : "admin"
-  const route = DEV_ROUTES[runtime]
+  const route = routes[runtime]
   return {
     name: "tabquest-dev-route",
     configureServer(server) {
@@ -95,20 +99,21 @@ const config = defineConfig(({ command, mode }) => {
   // admin needs for its Bun-only image handling.
   const vercelTarget = process.env.TABQUEST_TARGET === "vercel"
   if (vercelTarget && command === "build") requireDeployedOrigins(mode)
+  const routes = devRoutes(mode)
   return {
     resolve: { tsconfigPaths: true },
     server: {
       // The dev servers sit behind the tailnet dev-router (publish-route),
       // so requests arrive with those hostnames instead of loopback.
       allowedHosts: [
-        new URL(DEV_ROUTES.admin.url).hostname,
-        new URL(DEV_ROUTES.public.url).hostname,
+        new URL(routes.admin.url).hostname,
+        new URL(routes.public.url).hostname,
       ],
     },
     plugins: [
       devtools(),
       tailwindcss(),
-      devRouteLogger(),
+      devRouteLogger(routes),
       tanstackStart({
         serverFns: { generateFunctionId: generateServerFnId },
         // Route tests live next to their route file; they are not routes.
