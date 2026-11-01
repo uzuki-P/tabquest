@@ -6,6 +6,7 @@ import {
   OcrParseFailed,
   OcrRequestFailed,
   parseReceiptImage,
+  readRedactions,
   receiptOcrSchema,
 } from "./ocr"
 
@@ -15,6 +16,16 @@ const PNG_1X1 =
 function pngFile(): File {
   const buffer = Uint8Array.from(atob(PNG_1X1), (c) => c.charCodeAt(0))
   return new File([buffer], "receipt.png", { type: "image/png" })
+}
+
+async function sizedPngFile(width: number, height: number): Promise<File> {
+  const bytes = await new Bun.Image(await pngFile().bytes())
+    .resize(width, height)
+    .png()
+    .bytes()
+  return new File([new Uint8Array(bytes)], "receipt.png", {
+    type: "image/png",
+  })
 }
 
 const GOOD_REPLY = {
@@ -109,7 +120,7 @@ async function run<T, TError>(effect: Effect.Effect<T, TError>): Promise<T> {
 
 describe("receipt ocr service", () => {
   test("accepts an unreadable item price as zero", async () => {
-    const receipt = await run(
+    const { receipt } = await run(
       parseReceiptImage(
         depsWith({
           pollBody: {
@@ -156,7 +167,7 @@ describe("receipt ocr service", () => {
 
   test("submits a job, polls it, and parses the result", async () => {
     const captured: CapturedRequest[] = []
-    const receipt = await run(
+    const { receipt } = await run(
       parseReceiptImage(depsWith({}, captured), pngFile())
     )
 
@@ -262,7 +273,7 @@ describe("receipt ocr service", () => {
           })
     }) as typeof fetch
 
-    const receipt = await run(
+    const { receipt } = await run(
       parseReceiptImage({ ...depsWith(), fetchImpl }, pngFile())
     )
     expect(receipt.merchant).toBe("Kopi Kedai")
@@ -359,5 +370,75 @@ describe("receipt ocr service", () => {
       finalTotal: 24000,
     })
     expect(parsed.success).toBe(false)
+  })
+
+  test("returns suggested redactions as fractions of the sent image", async () => {
+    const captured: CapturedRequest[] = []
+    const { redactions } = await run(
+      parseReceiptImage(
+        depsWith(
+          {
+            pollBody: {
+              status: "succeeded",
+              response: {
+                result: {
+                  ...GOOD_REPLY,
+                  redactions: [
+                    { label: "order number", box: [10, 40, 110, 60] },
+                    { label: "broken", box: "nope" },
+                  ],
+                },
+              },
+            },
+          },
+          captured
+        ),
+        await sizedPngFile(200, 100)
+      )
+    )
+    // The prompt names the pixel size the box coordinates refer to.
+    expect(captured[0].instruction).toContain("200x100 image")
+    expect(redactions).toHaveLength(1)
+    expect(redactions[0].label).toBe("order number")
+    expect(redactions[0].x).toBeCloseTo(0.04)
+    expect(redactions[0].x + redactions[0].width).toBeCloseTo(0.56)
+  })
+
+  test("a reply without redactions still parses", async () => {
+    const { redactions } = await run(parseReceiptImage(depsWith(), pngFile()))
+    expect(redactions).toEqual([])
+  })
+})
+
+describe("readRedactions", () => {
+  test("pads pixel boxes and converts them to fractions", () => {
+    const [box] = readRedactions(
+      [{ label: "order number", box: [359, 1469, 619, 1494] }],
+      739,
+      1600
+    )
+    expect(box.label).toBe("order number")
+    // Padding grows the box past the raw coordinates on every side.
+    expect(box.x).toBeLessThan(359 / 739)
+    expect(box.y).toBeLessThan(1469 / 1600)
+    expect(box.x + box.width).toBeGreaterThan(619 / 739)
+    expect(box.y + box.height).toBeGreaterThan(1494 / 1600)
+  })
+
+  test("drops malformed, empty, and image-sized boxes", () => {
+    expect(
+      readRedactions(
+        [
+          { label: "short", box: [1, 2, 3] },
+          { label: "nan", box: [0, 0, Number.NaN, 5] },
+          { label: "outside", box: [900, 900, 950, 950] },
+          { label: "everything", box: [0, 0, 100, 100] },
+          "not an object",
+        ],
+        100,
+        100
+      )
+    ).toEqual([])
+    expect(readRedactions(null, 100, 100)).toEqual([])
   })
 })

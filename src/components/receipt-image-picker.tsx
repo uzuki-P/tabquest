@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from "react"
 import { createPortal } from "react-dom"
 import {
   ArrowSquareOutIcon,
+  EyeSlashIcon,
   ImageSquareIcon,
   MagicWandIcon,
   MagnifyingGlassPlusIcon,
@@ -11,8 +12,11 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 
+import { RedactionEditor } from "@/components/redaction-editor"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import type { RedactedImage } from "@/lib/redact-image"
+import type { RedactionBox } from "@/lib/redaction"
 import { cn } from "@/lib/utils"
 
 const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/avif"
@@ -26,7 +30,17 @@ export type ReceiptImagePickerProps = {
   ocrError: string | null
   ocrMessage: string | null
   onOcrParse: () => void
+  receiptRedaction: RedactedImage | null
+  billRedaction: RedactedImage | null
+  /** Flattens the boxes into a censored copy of `source` (none clears it). */
+  onRedact: (
+    target: "receipt" | "bill",
+    source: File,
+    boxes: RedactionBox[]
+  ) => Promise<void>
 }
+
+type RedactTarget = "receipt" | "bill"
 
 function fmtBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -50,18 +64,65 @@ function relTime(ms: number) {
   return `${Math.floor(hours / 24)} d ago`
 }
 
-function useFilePreview(inputRef: RefObject<HTMLInputElement | null>) {
-  const [file, setFile] = useState<File | null>(
-    () => inputRef.current?.files?.[0] ?? null
-  )
-  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
+function useObjectUrl(blob: Blob | null) {
+  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob])
   useEffect(
     () => () => {
       if (url) URL.revokeObjectURL(url)
     },
     [url]
   )
-  return { file, setFile, url }
+  return url
+}
+
+/**
+ * Mirrors a file input into preview state. `shownUrl` is the censored copy
+ * when `redaction` belongs to the current file, otherwise the original.
+ */
+function useFilePreview(
+  inputRef: RefObject<HTMLInputElement | null>,
+  redaction: RedactedImage | null
+) {
+  const [file, setFile] = useState<File | null>(
+    () => inputRef.current?.files?.[0] ?? null
+  )
+  const url = useObjectUrl(file)
+  const active = file && redaction?.source === file ? redaction : null
+  const censoredUrl = useObjectUrl(active?.file ?? null)
+  return { file, setFile, url, active, shownUrl: censoredUrl ?? url }
+}
+
+function CensorNote({
+  redaction,
+  onReview,
+}: {
+  redaction: RedactedImage
+  onReview: () => void
+}) {
+  const count = redaction.boxes.length
+  const areas = `${count} ${count === 1 ? "area" : "areas"}`
+  const labels = [
+    ...new Set(redaction.boxes.flatMap((box) => box.label ?? [])),
+  ].join(", ")
+  return (
+    <div
+      className={cn(
+        "flex items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-xs",
+        redaction.suggested
+          ? "border-amber-500/50 bg-amber-500/10"
+          : "bg-muted/40 text-muted-foreground"
+      )}
+    >
+      <p>
+        {redaction.suggested
+          ? `Parse blacked out ${areas} that ${count === 1 ? "looks" : "look"} personal${labels ? ` (${labels})` : ""}. Review them before saving.`
+          : `${areas} censored. The saved image hides them.`}
+      </p>
+      <Button type="button" size="sm" variant="outline" onClick={onReview}>
+        {redaction.suggested ? "Review" : "Edit"}
+      </Button>
+    </div>
+  )
 }
 
 function StatusChip({
@@ -186,7 +247,8 @@ function ImageLightbox({
  * inputs — `ocrInputRef` feeds OCR parsing, `resolveImageFile` picks the
  * image saved with the bill — so this component mirrors them into preview
  * state but never owns the files. The receipt photo doubles as the bill
- * image unless `separateBillImage` is set.
+ * image unless `separateBillImage` is set. Censoring is controlled too: the
+ * parent keeps each image's `RedactedImage` and uploads its flattened copy.
  */
 export function ReceiptImagePicker({
   ocrInputRef,
@@ -197,9 +259,15 @@ export function ReceiptImagePicker({
   ocrError,
   ocrMessage,
   onOcrParse,
+  receiptRedaction,
+  billRedaction,
+  onRedact,
 }: ReceiptImagePickerProps) {
-  const receipt = useFilePreview(ocrInputRef)
-  const bill = useFilePreview(billInputRef)
+  const receipt = useFilePreview(ocrInputRef, receiptRedaction)
+  const bill = useFilePreview(billInputRef, billRedaction)
+  const [censoring, setCensoring] = useState<RedactTarget | null>(null)
+  const censorTarget =
+    censoring === "receipt" ? receipt : censoring === "bill" ? bill : null
   const [receiptDims, setReceiptDims] = useState<{
     width: number
     height: number
@@ -261,7 +329,22 @@ export function ReceiptImagePicker({
               <MagicWandIcon data-icon="inline-start" />
               Parse
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!receipt.file}
+              onClick={() => setCensoring("receipt")}
+            >
+              <EyeSlashIcon data-icon="inline-start" />
+              Censor
+            </Button>
           </div>
+          {receipt.active && (
+            <CensorNote
+              redaction={receipt.active}
+              onReview={() => setCensoring("receipt")}
+            />
+          )}
           {receipt.file && (
             <dl className="space-y-1 text-xs text-muted-foreground">
               <MetaRow term="File">{receipt.file.name}</MetaRow>
@@ -306,6 +389,14 @@ export function ReceiptImagePicker({
                 </span>
               </span>
             </label>
+            {separateBillImage && bill.active && (
+              <div className="pl-6">
+                <CensorNote
+                  redaction={bill.active}
+                  onReview={() => setCensoring("bill")}
+                />
+              </div>
+            )}
             {separateBillImage && (
               <div className="flex items-center justify-between gap-2 pl-6">
                 <span className="truncate text-xs text-muted-foreground">
@@ -322,6 +413,16 @@ export function ReceiptImagePicker({
                       onClick={() => setZoom("bill")}
                     >
                       View
+                    </Button>
+                  )}
+                  {bill.file && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setCensoring("bill")}
+                    >
+                      Censor
                     </Button>
                   )}
                   <Button
@@ -354,7 +455,7 @@ export function ReceiptImagePicker({
         </div>
 
         <div className="space-y-1">
-          {receipt.url ? (
+          {receipt.shownUrl ? (
             <button
               type="button"
               onClick={() => setZoom("receipt")}
@@ -362,7 +463,7 @@ export function ReceiptImagePicker({
               className="group relative block h-80 w-full overflow-hidden rounded-lg border bg-muted/30 md:h-96"
             >
               <img
-                src={receipt.url}
+                src={receipt.shownUrl}
                 alt="Receipt image preview"
                 className="h-full w-full object-contain"
                 onLoad={(event) =>
@@ -401,7 +502,7 @@ export function ReceiptImagePicker({
               ? "Click the photo to view it fullscreen — portrait receipts read best there."
               : "PNG, JPEG, WebP, or AVIF up to 15 MiB and 40 MP."}
           </p>
-          {separateBillImage && bill.url && (
+          {separateBillImage && bill.shownUrl && (
             <button
               type="button"
               onClick={() => setZoom("bill")}
@@ -409,7 +510,7 @@ export function ReceiptImagePicker({
               className="block h-40 w-full overflow-hidden rounded-lg border bg-muted/30"
             >
               <img
-                src={bill.url}
+                src={bill.shownUrl}
                 alt="Bill image preview"
                 className="h-full w-full object-contain"
               />
@@ -418,18 +519,32 @@ export function ReceiptImagePicker({
         </div>
       </div>
 
-      {zoom === "receipt" && receipt.url && (
+      {zoom === "receipt" && receipt.shownUrl && (
         <ImageLightbox
-          src={receipt.url}
+          src={receipt.shownUrl}
           alt="Receipt image preview"
           onClose={() => setZoom(null)}
         />
       )}
-      {zoom === "bill" && bill.url && (
+      {zoom === "bill" && bill.shownUrl && (
         <ImageLightbox
-          src={bill.url}
+          src={bill.shownUrl}
           alt="Bill image preview"
           onClose={() => setZoom(null)}
+        />
+      )}
+      {censoring && censorTarget?.file && censorTarget.url && (
+        <RedactionEditor
+          src={censorTarget.url}
+          initialBoxes={censorTarget.active?.boxes ?? []}
+          title={
+            censoring === "receipt" ? "Censor receipt" : "Censor bill image"
+          }
+          onCancel={() => setCensoring(null)}
+          onApply={async (boxes) => {
+            await onRedact(censoring, censorTarget.file!, boxes)
+            setCensoring(null)
+          }}
         />
       )}
     </div>

@@ -37,6 +37,9 @@ import { describeSplitIssue, buildStructure } from "@/lib/bill-form"
 import type { BillFormValue } from "@/lib/bill-form"
 import type { BillStructureInput } from "@/lib/bill-schema"
 import type { ReceiptOcr } from "@/server/services/ocr"
+import { redactFile } from "@/lib/redact-image"
+import type { RedactedImage } from "@/lib/redact-image"
+import type { RedactionBox } from "@/lib/redaction"
 import { showToast } from "@/components/ui/toast"
 import {
   Dialog,
@@ -47,6 +50,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ReceiptImagePicker } from "@/components/receipt-image-picker"
+import type { ReceiptImagePickerProps } from "@/components/receipt-image-picker"
 import { todayJakarta } from "@/lib/time"
 
 export const Route = createFileRoute("/admin/bills/new")({
@@ -89,6 +93,36 @@ export function NewBillPage() {
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [ocrMessage, setOcrMessage] = useState<string | null>(null)
+  const [receiptRedaction, setReceiptRedaction] =
+    useState<RedactedImage | null>(null)
+  const [billRedaction, setBillRedaction] = useState<RedactedImage | null>(null)
+
+  async function onRedact(
+    target: "receipt" | "bill",
+    source: File,
+    boxes: RedactionBox[]
+  ) {
+    const redaction = await redactFile(source, boxes, false)
+    if (target === "receipt") setReceiptRedaction(redaction)
+    else setBillRedaction(redaction)
+  }
+
+  /**
+   * Blacks out the areas Parse flagged as personal, marked for review.
+   * Skipped when the photo was replaced meanwhile or the admin already
+   * censored it by hand. Failing here must not hide the parsed values.
+   */
+  async function applySuggestedRedactions(file: File, boxes: RedactionBox[]) {
+    if (boxes.length === 0 || ocrInputRef.current?.files?.[0] !== file) return
+    try {
+      const suggested = await redactFile(file, boxes, true)
+      setReceiptRedaction((current) =>
+        current?.source === file && !current.suggested ? current : suggested
+      )
+    } catch {
+      // The admin can still censor by hand.
+    }
+  }
 
   // Leaving with unsaved work must ask first. "Unsaved" means the values
   // drifted from the empty form (or from the values as of the last
@@ -169,6 +203,7 @@ export function NewBillPage() {
       const responseBody = (await response.json()) as {
         ok?: boolean
         receipt?: ReceiptOcr
+        redactions?: RedactionBox[]
         message?: string
       }
       if (!response.ok || !responseBody.receipt) {
@@ -180,6 +215,7 @@ export function NewBillPage() {
       setOcrMessage(
         `Filled ${items.length} items and ${adjustments.length} adjustments. Check every value against the receipt.`
       )
+      await applySuggestedRedactions(file, responseBody.redactions ?? [])
     } catch {
       setOcrError("Parsing the receipt failed.")
     } finally {
@@ -188,12 +224,15 @@ export function NewBillPage() {
   }
 
   /** The parsed receipt photo doubles as the bill image unless a
-      separate one was chosen. */
+      separate one was chosen. A censored copy replaces the picked file
+      when its boxes belong to that file. */
   function resolveImageFile(): File | null {
     const imageFile = separateBillImage
       ? billInputRef.current?.files?.[0]
       : ocrInputRef.current?.files?.[0]
-    return imageFile && imageFile.size > 0 ? imageFile : null
+    if (!imageFile || imageFile.size === 0) return null
+    const redaction = separateBillImage ? billRedaction : receiptRedaction
+    return redaction?.source === imageFile ? redaction.file : imageFile
   }
 
   async function createDraft(
@@ -410,6 +449,9 @@ export function NewBillPage() {
                 ocrError={ocrError}
                 ocrMessage={ocrMessage}
                 onOcrParse={() => void onOcrParse()}
+                receiptRedaction={receiptRedaction}
+                billRedaction={billRedaction}
+                onRedact={onRedact}
               />
             </div>
 
@@ -512,25 +554,10 @@ export function NewBillPage() {
 
 function ReceiptStep({
   form,
-  ocrInputRef,
-  billInputRef,
-  separateBillImage,
-  setSeparateBillImage,
-  ocrBusy,
-  ocrError,
-  ocrMessage,
-  onOcrParse,
+  ...picker
 }: {
   form: ReturnType<typeof useBillForm>
-  ocrInputRef: React.RefObject<HTMLInputElement | null>
-  billInputRef: React.RefObject<HTMLInputElement | null>
-  separateBillImage: boolean
-  setSeparateBillImage: (next: boolean) => void
-  ocrBusy: boolean
-  ocrError: string | null
-  ocrMessage: string | null
-  onOcrParse: () => void
-}) {
+} & ReceiptImagePickerProps) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -617,16 +644,7 @@ function ReceiptStep({
         </div>
       </div>
 
-      <ReceiptImagePicker
-        ocrInputRef={ocrInputRef}
-        billInputRef={billInputRef}
-        separateBillImage={separateBillImage}
-        setSeparateBillImage={setSeparateBillImage}
-        ocrBusy={ocrBusy}
-        ocrError={ocrError}
-        ocrMessage={ocrMessage}
-        onOcrParse={() => void onOcrParse()}
-      />
+      <ReceiptImagePicker {...picker} />
     </div>
   )
 }

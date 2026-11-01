@@ -2,6 +2,7 @@ import { createFileRoute, notFound, useRouter } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 import { useMemo, useRef, useState } from "react"
 import { Effect } from "effect"
+import { EyeSlashIcon } from "@phosphor-icons/react"
 
 import {
   BILL_STEPS,
@@ -28,6 +29,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { DatePicker } from "@/components/date-picker"
+import { RedactionEditor } from "@/components/redaction-editor"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,6 +47,7 @@ import {
   parseAmountInput,
 } from "@/domain/money"
 import { describeSplitIssue, buildStructure } from "@/lib/bill-form"
+import { flattenRedactions } from "@/lib/redact-image"
 import type { AllocationMatrix, BillFormValue } from "@/lib/bill-form"
 import type { PaymentState } from "@/lib/bill-schema"
 import { publicBillUrl } from "@/lib/urls"
@@ -142,6 +145,36 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
   const [busy, setBusy] = useState<"save" | "publish" | null>(null)
   const [imageVersion, setImageVersion] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [censoring, setCensoring] = useState<{
+    source: File
+    src: string
+  } | null>(null)
+
+  /** Opens the censor editor on the picked file, else on the stored image. */
+  async function openCensor() {
+    let source = fileInputRef.current?.files?.[0]
+    if (!source) {
+      if (!detail.bill.imageObjectKey && imageVersion === 0) {
+        setIssues(["Pick an image to censor first."])
+        return
+      }
+      const response = await fetch(
+        `/api/admin/bills/${detail.bill.id}/image?v=${imageVersion}`
+      )
+      if (!response.ok) {
+        setIssues(["Loading the current image failed."])
+        return
+      }
+      const blob = await response.blob()
+      source = new File([blob], "bill-image", { type: blob.type })
+    }
+    setCensoring({ source, src: URL.createObjectURL(source) })
+  }
+
+  function closeCensor() {
+    if (censoring) URL.revokeObjectURL(censoring.src)
+    setCensoring(null)
+  }
 
   const form = useBillForm(initial)
 
@@ -203,7 +236,7 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
     }
   }
 
-  async function uploadImage(file: File) {
+  async function uploadImage(file: File): Promise<boolean> {
     const body = new FormData()
     body.set("image", file)
     const response = await fetch(`/api/admin/bills/${detail.bill.id}/image`, {
@@ -215,10 +248,12 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
         message?: string
       }
       setIssues([errorBody.message ?? "Uploading the image failed."])
-      return
+      return false
     }
     setIssues([])
     setImageVersion((version) => version + 1)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    return true
   }
 
   return (
@@ -398,7 +433,20 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
                   >
                     Upload
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    title="Black out personal details, then upload the censored copy"
+                    onClick={() => void openCensor()}
+                  >
+                    <EyeSlashIcon data-icon="inline-start" />
+                    Censor
+                  </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Censor edits the picked file, or the current image when no
+                  file is picked.
+                </p>
                 {detail.bill.imageObjectKey ? (
                   <figure className="space-y-1">
                     <img
@@ -490,6 +538,28 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
           }
         />
       </form>
+      {censoring && (
+        <RedactionEditor
+          src={censoring.src}
+          initialBoxes={[]}
+          title="Censor bill image"
+          applyLabel="Censor & upload"
+          onCancel={closeCensor}
+          onApply={async (boxes) => {
+            const file =
+              boxes.length > 0
+                ? await flattenRedactions(
+                    censoring.source,
+                    boxes,
+                    censoring.source.name
+                  )
+                : censoring.source
+            if (!(await uploadImage(file)))
+              throw new Error("Uploading the censored image failed.")
+            closeCensor()
+          }}
+        />
+      )}
     </main>
   )
 }

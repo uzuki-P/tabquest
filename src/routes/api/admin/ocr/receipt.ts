@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/admin/ocr/receipt")({
             )
           }
 
-          const receipt = await Effect.runPromise(
+          const { receipt, redactions } = await Effect.runPromise(
             parseReceiptImage(
               {
                 token: ctx.env.VISION_API_TOKEN,
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/admin/ocr/receipt")({
               file
             )
           )
-          return json({ ok: true, receipt })
+          return json({ ok: true, receipt, redactions })
         } catch (error) {
           return errorResponse(error)
         }
