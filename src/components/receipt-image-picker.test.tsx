@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test } from "bun:test"
 import { useRef } from "react"
 
-import type { RedactedImage } from "@/lib/redact-image"
+import type { EditedImage } from "@/lib/image-edits"
 
 import { ReceiptImagePicker } from "./receipt-image-picker"
 
@@ -14,10 +14,10 @@ URL.revokeObjectURL = () => {}
 
 function PickerHarness({
   separateBillImage = false,
-  receiptRedaction = null,
+  receiptEdit = null,
 }: {
   separateBillImage?: boolean
-  receiptRedaction?: RedactedImage | null
+  receiptEdit?: EditedImage | null
 }) {
   const ocrInputRef = useRef<HTMLInputElement>(null)
   const billInputRef = useRef<HTMLInputElement>(null)
@@ -31,9 +31,9 @@ function PickerHarness({
       ocrError={null}
       ocrMessage={null}
       onOcrParse={() => {}}
-      receiptRedaction={receiptRedaction}
-      billRedaction={null}
-      onRedact={async () => {}}
+      receiptEdit={receiptEdit}
+      billEdit={null}
+      onEdit={async () => {}}
     />
   )
 }
@@ -87,20 +87,23 @@ test("separate bill image toggle reveals the bill image slot", () => {
 })
 
 test("a parse suggestion asks for review and the preview shows the censored copy", () => {
-  // The redaction must belong to the picked file, so pick first, then render
-  // again with a redaction whose source is that file.
+  // The edits must belong to the picked file, so pick first, then render
+  // again with edits whose source is that file.
   const { rerender } = render(<PickerHarness />)
   const source = pickReceiptImage()
   rerender(
     <PickerHarness
-      receiptRedaction={{
+      receiptEdit={{
         source,
         file: new File(["censored"], "receipt-censored.jpg", {
           type: "image/jpeg",
         }),
-        boxes: [
-          { x: 0.1, y: 0.8, width: 0.4, height: 0.02, label: "order number" },
-        ],
+        edits: {
+          crop: null,
+          boxes: [
+            { x: 0.1, y: 0.8, width: 0.4, height: 0.02, label: "order number" },
+          ],
+        },
         suggested: true,
       }}
     />
@@ -111,8 +114,34 @@ test("a parse suggestion asks for review and the preview shows the censored copy
   ).toBeTruthy()
   expect(screen.getByText(/order number/)).toBeTruthy()
   expect(screen.getByRole("button", { name: "Review" })).toBeTruthy()
-  expect(screen.getByRole("button", { name: /Censor/ })).toHaveProperty(
+  expect(screen.getByRole("button", { name: /Crop & censor/ })).toHaveProperty(
     "disabled",
     false
   )
+})
+
+test("a hand edit with a crop summarises both edits", () => {
+  const { rerender } = render(<PickerHarness />)
+  const source = pickReceiptImage()
+  rerender(
+    <PickerHarness
+      receiptEdit={{
+        source,
+        file: new File(["edited"], "receipt-edited.jpg", {
+          type: "image/jpeg",
+        }),
+        edits: {
+          crop: { x: 0, y: 0.1, width: 1, height: 0.8 },
+          boxes: [{ x: 0.1, y: 0.8, width: 0.4, height: 0.02 }],
+        },
+        suggested: false,
+      }}
+    />
+  )
+  expect(
+    screen.getByText(
+      "Cropped, 1 area censored. The saved image keeps these edits."
+    )
+  ).toBeTruthy()
+  expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy()
 })

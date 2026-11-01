@@ -3,7 +3,7 @@ import type { ReactNode, RefObject } from "react"
 import { createPortal } from "react-dom"
 import {
   ArrowSquareOutIcon,
-  EyeSlashIcon,
+  CropIcon,
   ImageSquareIcon,
   MagicWandIcon,
   MagnifyingGlassPlusIcon,
@@ -12,11 +12,11 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 
-import { RedactionEditor } from "@/components/redaction-editor"
+import { ImageEditor } from "@/components/image-editor"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import type { RedactedImage } from "@/lib/redact-image"
-import type { RedactionBox } from "@/lib/redaction"
+import { NO_EDITS } from "@/lib/image-edits"
+import type { EditedImage, ImageEdits } from "@/lib/image-edits"
 import { cn } from "@/lib/utils"
 
 const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/avif"
@@ -30,17 +30,17 @@ export type ReceiptImagePickerProps = {
   ocrError: string | null
   ocrMessage: string | null
   onOcrParse: () => void
-  receiptRedaction: RedactedImage | null
-  billRedaction: RedactedImage | null
-  /** Flattens the boxes into a censored copy of `source` (none clears it). */
-  onRedact: (
+  receiptEdit: EditedImage | null
+  billEdit: EditedImage | null
+  /** Flattens the edits into a copy of `source` (no edits clears it). */
+  onEdit: (
     target: "receipt" | "bill",
     source: File,
-    boxes: RedactionBox[]
+    edits: ImageEdits
   ) => Promise<void>
 }
 
-type RedactTarget = "receipt" | "bill"
+type EditTarget = "receipt" | "bill"
 
 function fmtBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -76,50 +76,56 @@ function useObjectUrl(blob: Blob | null) {
 }
 
 /**
- * Mirrors a file input into preview state. `shownUrl` is the censored copy
- * when `redaction` belongs to the current file, otherwise the original.
+ * Mirrors a file input into preview state. `shownUrl` is the edited copy
+ * when `edited` belongs to the current file, otherwise the original.
  */
 function useFilePreview(
   inputRef: RefObject<HTMLInputElement | null>,
-  redaction: RedactedImage | null
+  edited: EditedImage | null
 ) {
   const [file, setFile] = useState<File | null>(
     () => inputRef.current?.files?.[0] ?? null
   )
   const url = useObjectUrl(file)
-  const active = file && redaction?.source === file ? redaction : null
-  const censoredUrl = useObjectUrl(active?.file ?? null)
-  return { file, setFile, url, active, shownUrl: censoredUrl ?? url }
+  const active = file && edited?.source === file ? edited : null
+  const editedUrl = useObjectUrl(active?.file ?? null)
+  return { file, setFile, url, active, shownUrl: editedUrl ?? url }
 }
 
-function CensorNote({
-  redaction,
+function EditNote({
+  edited,
   onReview,
 }: {
-  redaction: RedactedImage
+  edited: EditedImage
   onReview: () => void
 }) {
-  const count = redaction.boxes.length
+  const count = edited.edits.boxes.length
   const areas = `${count} ${count === 1 ? "area" : "areas"}`
   const labels = [
-    ...new Set(redaction.boxes.flatMap((box) => box.label ?? [])),
+    ...new Set(edited.edits.boxes.flatMap((box) => box.label ?? [])),
   ].join(", ")
+  const summary = [
+    edited.edits.crop && "Cropped",
+    count > 0 && `${areas} censored`,
+  ]
+    .filter(Boolean)
+    .join(", ")
   return (
     <div
       className={cn(
         "flex items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-xs",
-        redaction.suggested
+        edited.suggested
           ? "border-amber-500/50 bg-amber-500/10"
           : "bg-muted/40 text-muted-foreground"
       )}
     >
       <p>
-        {redaction.suggested
+        {edited.suggested
           ? `Parse blacked out ${areas} that ${count === 1 ? "looks" : "look"} personal${labels ? ` (${labels})` : ""}. Review them before saving.`
-          : `${areas} censored. The saved image hides them.`}
+          : `${summary}. The saved image keeps these edits.`}
       </p>
       <Button type="button" size="sm" variant="outline" onClick={onReview}>
-        {redaction.suggested ? "Review" : "Edit"}
+        {edited.suggested ? "Review" : "Edit"}
       </Button>
     </div>
   )
@@ -247,8 +253,9 @@ function ImageLightbox({
  * inputs — `ocrInputRef` feeds OCR parsing, `resolveImageFile` picks the
  * image saved with the bill — so this component mirrors them into preview
  * state but never owns the files. The receipt photo doubles as the bill
- * image unless `separateBillImage` is set. Censoring is controlled too: the
- * parent keeps each image's `RedactedImage` and uploads its flattened copy.
+ * image unless `separateBillImage` is set. Crop and censor edits are
+ * controlled too: the parent keeps each image's `EditedImage` and uploads
+ * its flattened copy.
  */
 export function ReceiptImagePicker({
   ocrInputRef,
@@ -259,15 +266,15 @@ export function ReceiptImagePicker({
   ocrError,
   ocrMessage,
   onOcrParse,
-  receiptRedaction,
-  billRedaction,
-  onRedact,
+  receiptEdit,
+  billEdit,
+  onEdit,
 }: ReceiptImagePickerProps) {
-  const receipt = useFilePreview(ocrInputRef, receiptRedaction)
-  const bill = useFilePreview(billInputRef, billRedaction)
-  const [censoring, setCensoring] = useState<RedactTarget | null>(null)
-  const censorTarget =
-    censoring === "receipt" ? receipt : censoring === "bill" ? bill : null
+  const receipt = useFilePreview(ocrInputRef, receiptEdit)
+  const bill = useFilePreview(billInputRef, billEdit)
+  const [editing, setEditing] = useState<EditTarget | null>(null)
+  const editTarget =
+    editing === "receipt" ? receipt : editing === "bill" ? bill : null
   const [receiptDims, setReceiptDims] = useState<{
     width: number
     height: number
@@ -333,16 +340,16 @@ export function ReceiptImagePicker({
               type="button"
               variant="outline"
               disabled={!receipt.file}
-              onClick={() => setCensoring("receipt")}
+              onClick={() => setEditing("receipt")}
             >
-              <EyeSlashIcon data-icon="inline-start" />
-              Censor
+              <CropIcon data-icon="inline-start" />
+              Crop & censor
             </Button>
           </div>
           {receipt.active && (
-            <CensorNote
-              redaction={receipt.active}
-              onReview={() => setCensoring("receipt")}
+            <EditNote
+              edited={receipt.active}
+              onReview={() => setEditing("receipt")}
             />
           )}
           {receipt.file && (
@@ -391,9 +398,9 @@ export function ReceiptImagePicker({
             </label>
             {separateBillImage && bill.active && (
               <div className="pl-6">
-                <CensorNote
-                  redaction={bill.active}
-                  onReview={() => setCensoring("bill")}
+                <EditNote
+                  edited={bill.active}
+                  onReview={() => setEditing("bill")}
                 />
               </div>
             )}
@@ -420,9 +427,9 @@ export function ReceiptImagePicker({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => setCensoring("bill")}
+                      onClick={() => setEditing("bill")}
                     >
-                      Censor
+                      Edit
                     </Button>
                   )}
                   <Button
@@ -533,17 +540,15 @@ export function ReceiptImagePicker({
           onClose={() => setZoom(null)}
         />
       )}
-      {censoring && censorTarget?.file && censorTarget.url && (
-        <RedactionEditor
-          src={censorTarget.url}
-          initialBoxes={censorTarget.active?.boxes ?? []}
-          title={
-            censoring === "receipt" ? "Censor receipt" : "Censor bill image"
-          }
-          onCancel={() => setCensoring(null)}
-          onApply={async (boxes) => {
-            await onRedact(censoring, censorTarget.file!, boxes)
-            setCensoring(null)
+      {editing && editTarget?.file && editTarget.url && (
+        <ImageEditor
+          src={editTarget.url}
+          initialEdits={editTarget.active?.edits ?? NO_EDITS}
+          title={editing === "receipt" ? "Edit receipt" : "Edit bill image"}
+          onCancel={() => setEditing(null)}
+          onApply={async (edits) => {
+            await onEdit(editing, editTarget.file!, edits)
+            setEditing(null)
           }}
         />
       )}

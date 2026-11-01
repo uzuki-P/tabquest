@@ -2,7 +2,7 @@ import { createFileRoute, notFound, useRouter } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 import { useMemo, useRef, useState } from "react"
 import { Effect } from "effect"
-import { EyeSlashIcon } from "@phosphor-icons/react"
+import { CropIcon } from "@phosphor-icons/react"
 
 import {
   BILL_STEPS,
@@ -29,7 +29,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { DatePicker } from "@/components/date-picker"
-import { RedactionEditor } from "@/components/redaction-editor"
+import { ImageEditor } from "@/components/image-editor"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,7 +47,7 @@ import {
   parseAmountInput,
 } from "@/domain/money"
 import { describeSplitIssue, buildStructure } from "@/lib/bill-form"
-import { flattenRedactions } from "@/lib/redact-image"
+import { NO_EDITS, flattenEdits, hasEdits } from "@/lib/image-edits"
 import type { AllocationMatrix, BillFormValue } from "@/lib/bill-form"
 import type { PaymentState } from "@/lib/bill-schema"
 import { publicBillUrl } from "@/lib/urls"
@@ -436,16 +436,16 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
                   <Button
                     type="button"
                     variant="outline"
-                    title="Black out personal details, then upload the censored copy"
+                    title="Crop or black out personal details, then upload the edited copy"
                     onClick={() => void openCensor()}
                   >
-                    <EyeSlashIcon data-icon="inline-start" />
-                    Censor
+                    <CropIcon data-icon="inline-start" />
+                    Crop & censor
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Censor edits the picked file, or the current image when no
-                  file is picked.
+                  Crop & censor edits the picked file, or the current image when
+                  no file is picked.
                 </p>
                 {detail.bill.imageObjectKey ? (
                   <figure className="space-y-1">
@@ -539,23 +539,22 @@ function DraftEditor({ detail }: { detail: BillDetail }) {
         />
       </form>
       {censoring && (
-        <RedactionEditor
+        <ImageEditor
           src={censoring.src}
-          initialBoxes={[]}
-          title="Censor bill image"
-          applyLabel="Censor & upload"
+          initialEdits={NO_EDITS}
+          title="Edit bill image"
+          applyLabel="Save & upload"
           onCancel={closeCensor}
-          onApply={async (boxes) => {
-            const file =
-              boxes.length > 0
-                ? await flattenRedactions(
-                    censoring.source,
-                    boxes,
-                    censoring.source.name
-                  )
-                : censoring.source
+          onApply={async (edits) => {
+            const file = hasEdits(edits)
+              ? await flattenEdits(
+                  censoring.source,
+                  edits,
+                  censoring.source.name
+                )
+              : censoring.source
             if (!(await uploadImage(file)))
-              throw new Error("Uploading the censored image failed.")
+              throw new Error("Uploading the edited image failed.")
             closeCensor()
           }}
         />

@@ -37,8 +37,9 @@ import { describeSplitIssue, buildStructure } from "@/lib/bill-form"
 import type { BillFormValue } from "@/lib/bill-form"
 import type { BillStructureInput } from "@/lib/bill-schema"
 import type { ReceiptOcr } from "@/server/services/ocr"
-import { redactFile } from "@/lib/redact-image"
-import type { RedactedImage } from "@/lib/redact-image"
+import { editFile } from "@/lib/image-edits"
+import type { EditedImage, ImageEdits } from "@/lib/image-edits"
+import { mergeBoxes } from "@/lib/redaction"
 import type { RedactionBox } from "@/lib/redaction"
 import { showToast } from "@/components/ui/toast"
 import {
@@ -93,32 +94,43 @@ export function NewBillPage() {
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [ocrMessage, setOcrMessage] = useState<string | null>(null)
-  const [receiptRedaction, setReceiptRedaction] =
-    useState<RedactedImage | null>(null)
-  const [billRedaction, setBillRedaction] = useState<RedactedImage | null>(null)
+  const [receiptEdit, setReceiptEdit] = useState<EditedImage | null>(null)
+  const [billEdit, setBillEdit] = useState<EditedImage | null>(null)
 
-  async function onRedact(
+  async function onEdit(
     target: "receipt" | "bill",
     source: File,
-    boxes: RedactionBox[]
+    edits: ImageEdits
   ) {
-    const redaction = await redactFile(source, boxes, false)
-    if (target === "receipt") setReceiptRedaction(redaction)
-    else setBillRedaction(redaction)
+    const edited = await editFile(source, edits, false)
+    if (target === "receipt") setReceiptEdit(edited)
+    else setBillEdit(edited)
   }
 
   /**
-   * Blacks out the areas Parse flagged as personal, marked for review.
-   * Skipped when the photo was replaced meanwhile or the admin already
-   * censored it by hand. Failing here must not hide the parsed values.
+   * Blacks out the areas Parse flagged as personal and marks them for
+   * review. Boxes and crop already on this photo are kept, and suggestions
+   * that repeat an existing box are skipped. Ignored when the photo was
+   * replaced meanwhile. Failing here must not hide the parsed values.
    */
   async function applySuggestedRedactions(file: File, boxes: RedactionBox[]) {
     if (boxes.length === 0 || ocrInputRef.current?.files?.[0] !== file) return
+    const current = receiptEdit?.source === file ? receiptEdit.edits : null
+    const merged = mergeBoxes(current?.boxes ?? [], boxes)
+    if (current && merged.length === current.boxes.length) return
     try {
-      const suggested = await redactFile(file, boxes, true)
-      setReceiptRedaction((current) =>
-        current?.source === file && !current.suggested ? current : suggested
+      const suggested = await editFile(
+        file,
+        { boxes: merged, crop: current?.crop ?? null },
+        true
       )
+      setReceiptEdit((latest) => {
+        // A photo picked while this flattened, or hand edits made
+        // meanwhile, win over the suggestions.
+        if (ocrInputRef.current?.files?.[0] !== file) return latest
+        if (latest?.source === file && latest.edits !== current) return latest
+        return suggested
+      })
     } catch {
       // The admin can still censor by hand.
     }
@@ -224,15 +236,15 @@ export function NewBillPage() {
   }
 
   /** The parsed receipt photo doubles as the bill image unless a
-      separate one was chosen. A censored copy replaces the picked file
-      when its boxes belong to that file. */
+      separate one was chosen. An edited copy replaces the picked file
+      when its edits belong to that file. */
   function resolveImageFile(): File | null {
     const imageFile = separateBillImage
       ? billInputRef.current?.files?.[0]
       : ocrInputRef.current?.files?.[0]
     if (!imageFile || imageFile.size === 0) return null
-    const redaction = separateBillImage ? billRedaction : receiptRedaction
-    return redaction?.source === imageFile ? redaction.file : imageFile
+    const edited = separateBillImage ? billEdit : receiptEdit
+    return edited?.source === imageFile ? edited.file : imageFile
   }
 
   async function createDraft(
@@ -449,9 +461,9 @@ export function NewBillPage() {
                 ocrError={ocrError}
                 ocrMessage={ocrMessage}
                 onOcrParse={() => void onOcrParse()}
-                receiptRedaction={receiptRedaction}
-                billRedaction={billRedaction}
-                onRedact={onRedact}
+                receiptEdit={receiptEdit}
+                billEdit={billEdit}
+                onEdit={onEdit}
               />
             </div>
 

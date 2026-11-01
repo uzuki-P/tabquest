@@ -77,3 +77,53 @@ export function boxFromModelPixels(
   if (box.width * box.height > 0.5) return null
   return label ? { ...box, label } : box
 }
+
+export type Corner = "nw" | "ne" | "sw" | "se"
+export const CORNERS: readonly Corner[] = ["nw", "ne", "sw", "se"]
+
+/** Resizes a box by dragging one corner; the opposite corner stays put. */
+export function resizeFromCorner(
+  box: RedactionBox,
+  corner: Corner,
+  x: number,
+  y: number
+): RedactionBox {
+  const anchorX = corner.endsWith("w") ? box.x + box.width : box.x
+  const anchorY = corner.startsWith("n") ? box.y + box.height : box.y
+  return { ...box, ...boxFromPoints(anchorX, anchorY, x, y) }
+}
+
+/** Area shared by two boxes, as a share of the smaller box. */
+export function overlapRatio(a: RedactionBox, b: RedactionBox): number {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  if (width <= 0 || height <= 0) return 0
+  const smaller = Math.min(a.width * a.height, b.width * b.height)
+  return smaller > 0 ? (width * height) / smaller : 0
+}
+
+/**
+ * Adds incoming boxes that do not mostly cover an existing one, so running
+ * Parse twice does not stack duplicate suggestions.
+ */
+export function mergeBoxes(
+  existing: readonly RedactionBox[],
+  incoming: readonly RedactionBox[]
+): RedactionBox[] {
+  const merged = [...existing]
+  for (const box of incoming) {
+    if (!merged.some((other) => overlapRatio(box, other) > 0.6))
+      merged.push(box)
+  }
+  return merged
+}
+
+/** A crop this close to the full image is no crop at all. */
+export function isFullImage(box: RedactionBox): boolean {
+  return (
+    box.x <= 0.001 &&
+    box.y <= 0.001 &&
+    box.width >= 0.998 &&
+    box.height >= 0.998
+  )
+}
