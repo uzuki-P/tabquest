@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Local only: start the admin auto-deploy when a commit or merge moves main.
+# Installed by `just install-auto-deploy`.
+[[ "${1:-}" == committed ]] || exit 0
+zero=0000000000000000000000000000000000000000
+trigger=false
+while read -r _old new ref; do
+  case "$ref" in
+    refs/heads/main)
+      [[ "$new" != "$zero" ]] && trigger=true ;;
+  esac
+done
+if [[ "$trigger" == true ]]; then
+  systemctl --user start --no-block tabquest-admin-deploy.service 2>/dev/null || true
+fi
+exit 0

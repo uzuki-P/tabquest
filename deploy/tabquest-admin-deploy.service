@@ -1,0 +1,11 @@
+# Install with `just install-auto-deploy`; it adds a host drop-in that points
+# WorkingDirectory at the main checkout and PATH at bun and just.
+# Started by the reference-transaction hook whenever main moves.
+[Unit]
+Description=Tabquest admin auto-deploy from main
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/tabquest
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env just auto-deploy-admin

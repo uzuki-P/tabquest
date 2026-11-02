@@ -37,6 +37,17 @@ on the new Vercel deployment. A failed check stops the command and reports
 which step failed. It does not run from a worktree or publish this worktree's
 unmerged code.
 
+Admin also redeploys on its own after every new commit on `main`; Vercel's
+Git integration handles public separately. Run `just install-auto-deploy`
+once in the main checkout. It installs the `tabquest-admin-deploy.service`
+oneshot unit, adds a host drop-in that points it at this checkout, and
+installs a `reference-transaction` git hook. When a commit, merge, or pull
+moves `main`, the hook starts the unit, which runs `just auto-deploy-admin`.
+That recipe skips when the main checkout is not on `main` or has uncommitted
+tracked changes, and skips a commit it already deployed. Otherwise it runs
+`just deploy-admin`, which is `just update-prod` without the Vercel publish,
+including any pending migrations. Follow it with `just logs admin-deploy`.
+
 One-time production setup on this host after the worktree is merged:
 
 1. In the main checkout, copy `.env.prod.example` to the ignored `.env.prod`

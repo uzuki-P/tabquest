@@ -85,7 +85,11 @@ restart-all:
     systemctl --user restart {{admin_service}}
 
 # Deploy admin and public from the main checkout on main, including images.
-update-prod:
+update-prod: deploy-admin
+    bun run deploy/publish.ts
+
+# Check, build, and restart admin from the main checkout on main, then wait for a database read.
+deploy-admin:
     #!/usr/bin/env bash
     set -euo pipefail
     # Admin applies pending migrations on restart; refuse cascading drops.
@@ -94,17 +98,55 @@ update-prod:
     bun run build
     systemctl --user restart {{admin_service}}
     systemctl --user is-active --quiet {{admin_service}}
-    ready=false
     for attempt in {1..15}; do
         code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54096/api/public/bills/update-prod-healthcheck 2>/dev/null || true)
-        if [[ "$code" == 404 ]]; then ready=true; break; fi
+        if [[ "$code" == 404 ]]; then exit 0; fi
         sleep 1
     done
-    if [[ "$ready" != true ]]; then
-        echo "Admin did not pass its database-backed health check; public deploy skipped." >&2
+    echo "Admin did not pass its database-backed health check." >&2
+    exit 1
+
+# Run by tabquest-admin-deploy.service: deploy admin at the new main commit when the tree is clean.
+auto-deploy-admin:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    head=$(git rev-parse HEAD)
+    if [[ "$(git branch --show-current)" != main ]]; then
+        echo "Skipped: the main checkout is not on branch main."
+        exit 0
+    fi
+    if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+        echo "Skipped: the main checkout has uncommitted changes." >&2
         exit 1
     fi
-    bun run deploy/publish.ts
+    state="$(git rev-parse --git-common-dir)/tabquest-admin-deployed"
+    if [[ -f "$state" && "$(cat "$state")" == "$head" ]]; then
+        echo "Skipped: $head is already deployed."
+        exit 0
+    fi
+    echo "Deploying admin at $head."
+    just deploy-admin
+    echo "$head" > "$state"
+
+# Install the admin auto-deploy unit and git hook in the main checkout.
+install-auto-deploy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    checkout="$(git rev-parse --show-toplevel)"
+    main_checkout="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+    if [[ "$(realpath "$checkout")" != "$(realpath "$main_checkout")" || "$(git branch --show-current)" != main ]]; then
+        echo "install-auto-deploy only runs in the main checkout on branch main." >&2
+        exit 1
+    fi
+    unit_dir="$HOME/.config/systemd/user"
+    install -m 644 -D deploy/tabquest-admin-deploy.service "$unit_dir/tabquest-admin-deploy.service"
+    tool_path="$(dirname "$(command -v bun)"):$(dirname "$(command -v just)"):/usr/local/bin:/usr/bin:/bin"
+    mkdir -p "$unit_dir/tabquest-admin-deploy.service.d"
+    printf '# Host-specific paths for this machine (kept out of the public repository).\n[Service]\nWorkingDirectory=%s\nEnvironment=PATH=%s\n' \
+        "$main_checkout" "$tool_path" > "$unit_dir/tabquest-admin-deploy.service.d/host.conf"
+    install -m 755 deploy/hooks/reference-transaction "$(git rev-parse --git-common-dir)/hooks/reference-transaction"
+    systemctl --user daemon-reload
+    echo "Installed. Each new commit on main now redeploys admin; follow it with: just logs admin-deploy"
 
 # Install the private admin env file from the main checkout for systemd.
 install-prod-env:
