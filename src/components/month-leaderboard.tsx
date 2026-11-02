@@ -41,7 +41,8 @@ import type {
 
 /**
  * The public home board, played as an arena: a sticky month header with
- * live tallies, unpaid splits flagged on top, spender cards with tiers,
+ * live tallies, last month's unpaid splits carried over on top, then
+ * this month's unpaid splits, spender cards with tiers,
  * badges and overtake gaps, the tip jar as a three-tile podium, the month
  * as a selectable week strip, and an events feed mixing orders with
  * holidays. All figures come from listMonthlyLeaderboard and
@@ -60,6 +61,8 @@ export interface MonthLeaderboardProps {
   /** Any date inside the month to render, as YYYY-MM-DD. */
   anchorKey: string
   bills: BillListItem[]
+  /** Bills from the month before, scanned for splits still unpaid. */
+  previousBills: BillListItem[]
   leaderboard: MonthlyLeaderboard
   tips: MonthlyTips
 }
@@ -986,6 +989,75 @@ function WeekEvents({
   )
 }
 
+/** Bills with at least one split still unpaid, newest first. */
+function unpaidOf(bills: BillListItem[]): BillListItem[] {
+  return bills
+    .filter(
+      (bill) =>
+        bill.billPlayerCount > 0 && bill.paidCount < bill.billPlayerCount
+    )
+    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
+}
+
+function UnpaidSplitsSection({
+  label,
+  bills,
+  className,
+}: {
+  label: string
+  bills: BillListItem[]
+  className?: string
+}) {
+  return (
+    <section aria-label={label} className={cn("arena-rise", className)}>
+      <div className="flex items-center justify-between border-b-2 border-arena-line pb-2">
+        <h2 className="font-heading text-lg font-black uppercase">{label}</h2>
+        <span className="font-mono text-xs tracking-[0.2em] text-arena-accent uppercase">
+          {bills.length} waiting
+        </span>
+      </div>
+      <ul>
+        {bills.map((bill, index) => {
+          const day = Temporal.PlainDate.from(bill.orderDate)
+          return (
+            <li
+              key={bill.id}
+              className="arena-slide"
+              style={delayStyle(Math.min(index * 0.05, 0.3))}
+            >
+              <Link
+                to="/b/$publicId"
+                params={{ publicId: bill.publicId }}
+                className="group flex items-center gap-3 border-b-2 border-arena-line px-3 py-3 hover:bg-primary/10"
+              >
+                <span className="w-20 shrink-0 font-mono text-xs font-bold uppercase tabular-nums">
+                  {MONTH_SHORT[day.month - 1]} {day.day}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-heading text-sm font-black uppercase group-hover:text-arena-accent">
+                    {bill.merchant}
+                  </span>
+                  <span className="block font-mono text-xs text-foreground/70 tabular-nums">
+                    {bill.billPlayerCount} player
+                    {bill.billPlayerCount === 1 ? "" : "s"}
+                    {bill.itemCount > 0 && ` · ${bill.itemCount} items`}
+                  </span>
+                </span>
+                <span className="shrink-0 border border-arena-line bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wider text-arena-accent">
+                  {bill.paidCount}/{bill.billPlayerCount} unpaid
+                </span>
+                <span className="w-[104px] shrink-0 text-right font-mono text-sm font-bold tabular-nums">
+                  {formatRupiah(bill.finalTotal)}
+                </span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 /* ---------------------------------------------------------------- */
 /* The board                                                         */
 /* ---------------------------------------------------------------- */
@@ -993,6 +1065,7 @@ function WeekEvents({
 export function MonthLeaderboard({
   anchorKey,
   bills,
+  previousBills,
   leaderboard,
   tips,
 }: MonthLeaderboardProps) {
@@ -1005,16 +1078,12 @@ export function MonthLeaderboard({
   const topSpend = Math.max(rows.at(0)?.totalSpend ?? 1, 1)
   const [showAll, setShowAll] = useState(false)
   const shown = showAll ? rows : rows.slice(0, 6)
-  const unpaidBills = useMemo(
-    () =>
-      bills
-        .filter(
-          (bill) =>
-            bill.billPlayerCount > 0 && bill.paidCount < bill.billPlayerCount
-        )
-        .sort((a, b) => b.orderDate.localeCompare(a.orderDate)),
-    [bills]
-  )
+  const unpaidBills = useMemo(() => unpaidOf(bills), [bills])
+  const previousUnpaid = useMemo(() => unpaidOf(previousBills), [previousBills])
+  const previousMonthKey = Temporal.PlainDate.from(anchorKey)
+    .with({ day: 1 })
+    .subtract({ months: 1 })
+    .toString()
 
   return (
     <div>
@@ -1064,62 +1133,28 @@ export function MonthLeaderboard({
       {/* Keyed by month: a month switch visibly re-deals the whole board */}
       <main className="mx-auto max-w-[1400px] px-4 py-8 md:px-6">
         <div key={anchorKey}>
-          {/* Unpaid splits lead the page: money on the table comes first */}
+          {/* Unpaid splits lead the page: money on the table comes first,
+              oldest debts (carried over from last month) at the very top */}
+          {previousUnpaid.length > 0 && (
+            <UnpaidSplitsSection
+              label={`Carried over from ${monthLabel(previousMonthKey)}`}
+              bills={previousUnpaid}
+            />
+          )}
           {unpaidBills.length > 0 && (
-            <section aria-label="Unpaid splits" className="arena-rise">
-              <div className="flex items-center justify-between border-b-2 border-arena-line pb-2">
-                <h2 className="font-heading text-lg font-black uppercase">
-                  Unpaid splits
-                </h2>
-                <span className="font-mono text-xs tracking-[0.2em] text-arena-accent uppercase">
-                  {unpaidBills.length} waiting
-                </span>
-              </div>
-              <ul>
-                {unpaidBills.map((bill, index) => {
-                  const day = Temporal.PlainDate.from(bill.orderDate)
-                  return (
-                    <li
-                      key={bill.id}
-                      className="arena-slide"
-                      style={delayStyle(Math.min(index * 0.05, 0.3))}
-                    >
-                      <Link
-                        to="/b/$publicId"
-                        params={{ publicId: bill.publicId }}
-                        className="group flex items-center gap-3 border-b-2 border-arena-line px-3 py-3 hover:bg-primary/10"
-                      >
-                        <span className="w-20 shrink-0 font-mono text-xs font-bold uppercase tabular-nums">
-                          {MONTH_SHORT[day.month - 1]} {day.day}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-heading text-sm font-black uppercase group-hover:text-arena-accent">
-                            {bill.merchant}
-                          </span>
-                          <span className="block font-mono text-xs text-foreground/70 tabular-nums">
-                            {bill.billPlayerCount} player
-                            {bill.billPlayerCount === 1 ? "" : "s"}
-                            {bill.itemCount > 0 && ` · ${bill.itemCount} items`}
-                          </span>
-                        </span>
-                        <span className="shrink-0 border border-arena-line bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wider text-arena-accent">
-                          {bill.paidCount}/{bill.billPlayerCount} unpaid
-                        </span>
-                        <span className="w-[104px] shrink-0 text-right font-mono text-sm font-bold tabular-nums">
-                          {formatRupiah(bill.finalTotal)}
-                        </span>
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
+            <UnpaidSplitsSection
+              label="Unpaid splits"
+              bills={unpaidBills}
+              className={previousUnpaid.length > 0 ? "mt-10" : undefined}
+            />
           )}
 
           {/* Players */}
           <section
             aria-label="Player cards"
-            className={unpaidBills.length > 0 ? "mt-10" : ""}
+            className={
+              unpaidBills.length > 0 || previousUnpaid.length > 0 ? "mt-10" : ""
+            }
           >
             <div className="flex items-center justify-between border-b-2 border-arena-line pb-2">
               <h2 className="font-heading text-lg font-black uppercase">

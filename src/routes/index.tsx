@@ -54,26 +54,30 @@ export const Route = createFileRoute("/")({
     const day = date ?? todayJakarta()
     const first = Temporal.PlainDate.from(day).with({ day: 1 })
     const last = first.add({ months: 1 }).subtract({ days: 1 })
-    const [bills, leaderboard, tips] = await Promise.all([
+    const previousMonth = first.subtract({ months: 1 }).toString()
+    const [bills, previousBills, leaderboard, tips] = await Promise.all([
       listBillsForMonth({ data: day }),
+      listBillsForMonth({ data: previousMonth }),
       fetchLeaderboard({
         data: { from: first.toString(), to: last.toString() },
       }),
       fetchTips({ data: { from: first.toString(), to: last.toString() } }),
     ])
-    return { date: day, bills, leaderboard, tips }
+    return { date: day, bills, previousBills, leaderboard, tips }
   },
   component: HomePage,
   pendingComponent: HomeBoardSkeleton,
 })
 
 function HomePage() {
-  const { date, bills, leaderboard, tips } = Route.useLoaderData()
+  const { date, bills, previousBills, leaderboard, tips } =
+    Route.useLoaderData()
 
   return (
     <MonthLeaderboard
       anchorKey={date}
       bills={bills}
+      previousBills={previousBills}
       leaderboard={leaderboard}
       tips={tips}
     />
