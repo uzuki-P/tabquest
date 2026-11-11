@@ -76,8 +76,8 @@ function depsWith(
   }
   return {
     token: "test-token",
-    provider: "claude",
-    model: "claude-haiku-5-5",
+    provider: "zcode",
+    model: "",
     reasoningEffort: "",
     baseUrl: "https://vision.test/",
     timeoutMs: 5_000,
@@ -94,7 +94,7 @@ function depsWith(
         Object.assign(capturedRequest, {
           instruction: String(form.get("instruction")),
           provider: String(form.get("provider")),
-          model: String(form.get("model")),
+          model: (form.get("model") as string | null) ?? undefined,
           reasoningEffort:
             (form.get("reasoning_effort") as string | null) ?? undefined,
           imageName: image.name,
@@ -176,9 +176,9 @@ describe("receipt ocr service", () => {
     expect(captured).toHaveLength(2)
     expect(captured[0].method).toBe("POST")
     expect(captured[0].url).toBe("https://vision.test/v1/jobs")
-    expect(captured[0].provider).toBe("claude")
-    expect(captured[0].model).toBe("claude-haiku-5-5")
-    // Haiku takes no effort, so the empty default leaves the field out.
+    expect(captured[0].provider).toBe("zcode")
+    // Empty model and effort leave the fields out for vision-api's defaults.
+    expect(captured[0].model).toBeUndefined()
     expect(captured[0].reasoningEffort).toBeUndefined()
     expect(captured[0].instruction).toContain("sourceSubtotal")
     expect(captured[0].imageName).toBe("receipt.jpg")
@@ -252,7 +252,7 @@ describe("receipt ocr service", () => {
   })
 
   test("retries invalid model JSON with the Codex image model", async () => {
-    const attempts: Array<{ provider: string; model: string }> = []
+    const attempts: Array<{ provider: string; model: string | null }> = []
     const fetchImpl = (async (
       _url: string | URL | Request,
       init?: RequestInit
@@ -261,7 +261,7 @@ describe("receipt ocr service", () => {
         const form = init.body as FormData
         attempts.push({
           provider: String(form.get("provider")),
-          model: String(form.get("model")),
+          model: form.get("model") as string | null,
         })
         return Response.json({ id: `job-${attempts.length}` }, { status: 202 })
       }
@@ -281,7 +281,7 @@ describe("receipt ocr service", () => {
     )
     expect(receipt.merchant).toBe("Kopi Kedai")
     expect(attempts).toEqual([
-      { provider: "claude", model: "claude-haiku-5-5" },
+      { provider: "zcode", model: null },
       { provider: "codex", model: "gpt-6-luna" },
     ])
   })

@@ -8,8 +8,8 @@ import { InvalidImage, ImageTooLarge, MAX_UPLOAD_BYTES } from "./images"
 
 /**
  * Receipt OCR. Sends a prepared receipt image to the vision-api service's
- * job endpoint, which runs it through a provider CLI (Claude Code by
- * default, agent tools denied) and returns the model's JSON reply. The reply is mapped onto the bill
+ * job endpoint, which runs it through a provider (ZCode via the Z.ai
+ * Coding Plan by default) and returns the model's JSON reply. The reply is mapped onto the bill
  * form's shapes. The admin stays responsible for checking every parsed
  * value against the original image. The same reply also suggests areas
  * holding personal data, which the admin reviews before the image is
@@ -117,7 +117,8 @@ export class OcrParseFailed extends Data.TaggedError("OcrParseFailed")<{
 
 export interface OcrDeps {
   token: string
-  provider: "opencode" | "codex" | "claude"
+  provider: "opencode" | "codex" | "claude" | "zcode"
+  /** Empty omits the field so vision-api picks the provider default. */
   model: string
   reasoningEffort: string
   baseUrl: string
@@ -236,7 +237,7 @@ export function parseReceiptImage(
       const form = new FormData()
       form.append("instruction", ocrPrompt(sentWidth, sentHeight))
       form.append("provider", attempt.provider)
-      form.append("model", attempt.model)
+      if (attempt.model) form.append("model", attempt.model)
       if (deps.reasoningEffort) {
         form.append("reasoning_effort", deps.reasoningEffort)
       }

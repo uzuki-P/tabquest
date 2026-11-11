@@ -36,10 +36,11 @@ const envSchema = z.object({
   ),
   /** vision-api provider for the first OCR attempt. */
   VISION_API_PROVIDER: z
-    .enum(["opencode", "codex", "claude"])
-    .default("claude"),
-  VISION_API_MODEL: z.string().min(1).default("claude-haiku-5-5"),
-  /** Empty omits the effort; Claude Haiku accepts none. */
+    .enum(["opencode", "codex", "claude", "zcode"])
+    .default("zcode"),
+  /** Empty omits the model so vision-api picks its default (GLM-5.3-Flash for zcode). */
+  VISION_API_MODEL: z.string().default(""),
+  /** Empty omits the effort so vision-api uses its default. */
   VISION_API_REASONING_EFFORT: z.string().default(""),
   /** Overall submit+poll budget for one OCR job. */
   VISION_API_TIMEOUT_MS: z.coerce
