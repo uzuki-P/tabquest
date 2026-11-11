@@ -8,8 +8,8 @@ import { InvalidImage, ImageTooLarge, MAX_UPLOAD_BYTES } from "./images"
 
 /**
  * Receipt OCR. Sends a prepared receipt image to the vision-api service's
- * job endpoint, which runs it through the OpenCode CLI (agent tools denied)
- * and returns the model's JSON reply. The reply is mapped onto the bill
+ * job endpoint, which runs it through a provider CLI (Claude Code by
+ * default, agent tools denied) and returns the model's JSON reply. The reply is mapped onto the bill
  * form's shapes. The admin stays responsible for checking every parsed
  * value against the original image. The same reply also suggests areas
  * holding personal data, which the admin reviews before the image is
@@ -117,6 +117,7 @@ export class OcrParseFailed extends Data.TaggedError("OcrParseFailed")<{
 
 export interface OcrDeps {
   token: string
+  provider: "opencode" | "codex" | "claude"
   model: string
   reasoningEffort: string
   baseUrl: string
@@ -218,11 +219,11 @@ export function parseReceiptImage(
     const deadline = Date.now() + deps.timeoutMs
     const pollIntervalMs = deps.pollIntervalMs ?? 3_000
     let result: unknown
-    // The configured fast model occasionally replies with invalid JSON. One
+    // The configured fast model can reply with invalid JSON. One
     // Codex attempt can recover that specific failure without retrying other
     // provider errors or extending the overall request budget.
     const attempts = [
-      { provider: "opencode", model: deps.model },
+      { provider: deps.provider, model: deps.model },
       { provider: "codex", model: "gpt-6-luna" },
     ] as const
     for (const [attemptIndex, attempt] of attempts.entries()) {
@@ -236,7 +237,9 @@ export function parseReceiptImage(
       form.append("instruction", ocrPrompt(sentWidth, sentHeight))
       form.append("provider", attempt.provider)
       form.append("model", attempt.model)
-      form.append("reasoning_effort", deps.reasoningEffort)
+      if (deps.reasoningEffort) {
+        form.append("reasoning_effort", deps.reasoningEffort)
+      }
       form.append(
         "image",
         new File([new Uint8Array(encoded)], "receipt.jpg", {

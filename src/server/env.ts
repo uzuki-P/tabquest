@@ -34,8 +34,13 @@ const envSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.url().optional()
   ),
-  VISION_API_MODEL: z.string().min(1).default("zai-coding-plan/glm-5.3-flash"),
-  VISION_API_REASONING_EFFORT: z.string().min(1).default("low"),
+  /** vision-api provider for the first OCR attempt. */
+  VISION_API_PROVIDER: z
+    .enum(["opencode", "codex", "claude"])
+    .default("claude"),
+  VISION_API_MODEL: z.string().min(1).default("claude-haiku-5-5"),
+  /** Empty omits the effort; Claude Haiku accepts none. */
+  VISION_API_REASONING_EFFORT: z.string().default(""),
   /** Overall submit+poll budget for one OCR job. */
   VISION_API_TIMEOUT_MS: z.coerce
     .number()

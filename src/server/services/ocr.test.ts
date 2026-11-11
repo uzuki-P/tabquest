@@ -76,8 +76,9 @@ function depsWith(
   }
   return {
     token: "test-token",
-    model: "zai-coding-plan/glm-5.3-flash",
-    reasoningEffort: "low",
+    provider: "claude",
+    model: "claude-haiku-5-5",
+    reasoningEffort: "",
     baseUrl: "https://vision.test/",
     timeoutMs: 5_000,
     pollIntervalMs: 1,
@@ -94,7 +95,8 @@ function depsWith(
           instruction: String(form.get("instruction")),
           provider: String(form.get("provider")),
           model: String(form.get("model")),
-          reasoningEffort: String(form.get("reasoning_effort")),
+          reasoningEffort:
+            (form.get("reasoning_effort") as string | null) ?? undefined,
           imageName: image.name,
           imageType: image.type,
         })
@@ -174,9 +176,10 @@ describe("receipt ocr service", () => {
     expect(captured).toHaveLength(2)
     expect(captured[0].method).toBe("POST")
     expect(captured[0].url).toBe("https://vision.test/v1/jobs")
-    expect(captured[0].provider).toBe("opencode")
-    expect(captured[0].model).toBe("zai-coding-plan/glm-5.3-flash")
-    expect(captured[0].reasoningEffort).toBe("low")
+    expect(captured[0].provider).toBe("claude")
+    expect(captured[0].model).toBe("claude-haiku-5-5")
+    // Haiku takes no effort, so the empty default leaves the field out.
+    expect(captured[0].reasoningEffort).toBeUndefined()
     expect(captured[0].instruction).toContain("sourceSubtotal")
     expect(captured[0].imageName).toBe("receipt.jpg")
     expect(captured[0].imageType).toBe("image/jpeg")
@@ -278,7 +281,7 @@ describe("receipt ocr service", () => {
     )
     expect(receipt.merchant).toBe("Kopi Kedai")
     expect(attempts).toEqual([
-      { provider: "opencode", model: "zai-coding-plan/glm-5.3-flash" },
+      { provider: "claude", model: "claude-haiku-5-5" },
       { provider: "codex", model: "gpt-6-luna" },
     ])
   })
@@ -308,6 +311,7 @@ describe("receipt ocr service", () => {
       parseReceiptImage(
         {
           token: "t",
+          provider: "claude",
           model: "m",
           reasoningEffort: "low",
           baseUrl: "https://vision.test",

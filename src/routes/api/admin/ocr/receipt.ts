@@ -46,6 +46,7 @@ export const Route = createFileRoute("/api/admin/ocr/receipt")({
             parseReceiptImage(
               {
                 token: ctx.env.VISION_API_TOKEN,
+                provider: ctx.env.VISION_API_PROVIDER,
                 model: ctx.env.VISION_API_MODEL,
                 reasoningEffort: ctx.env.VISION_API_REASONING_EFFORT,
                 baseUrl: visionApiUrl,
