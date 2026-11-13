@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { ReactNode, RefObject } from "react"
+import type { DragEvent, ReactNode, RefObject } from "react"
 import { createPortal } from "react-dom"
 import {
   ArrowSquareOutIcon,
@@ -20,6 +20,7 @@ import type { EditedImage, ImageEdits } from "@/lib/image-edits"
 import { cn } from "@/lib/utils"
 
 const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/avif"
+const IMAGE_TYPES = IMAGE_ACCEPT.split(",")
 
 export type ReceiptImagePickerProps = {
   ocrInputRef: RefObject<HTMLInputElement | null>
@@ -90,6 +91,83 @@ function useFilePreview(
   const active = file && edited?.source === file ? edited : null
   const editedUrl = useObjectUrl(active?.file ?? null)
   return { file, setFile, url, active, shownUrl: editedUrl ?? url }
+}
+
+/**
+ * Puts `file` into the uncontrolled `input`, as if it had been picked
+ * there, so everything that reads the input sees the dropped file.
+ */
+function assignInputFile(input: HTMLInputElement, file: File) {
+  const transfer = new DataTransfer()
+  transfer.items.add(file)
+  input.files = transfer.files
+}
+
+/**
+ * Drag-and-drop handlers for an image drop zone. A dropped image goes into
+ * `inputRef` and is handed to `onFile`; anything else is rejected with a
+ * message. `over` is true while files hover the zone.
+ */
+function useImageDrop(
+  inputRef: RefObject<HTMLInputElement | null>,
+  onFile: (file: File) => void
+) {
+  const [over, setOver] = useState(false)
+  const [rejected, setRejected] = useState<string | null>(null)
+  // dragenter/dragleave fire for every child; count them to know when the
+  // pointer really left the zone.
+  const depth = useRef(0)
+
+  function carriesFiles(event: DragEvent) {
+    return Array.from(event.dataTransfer.types).includes("Files")
+  }
+
+  const handlers = {
+    onDragEnter(event: DragEvent) {
+      if (!carriesFiles(event)) return
+      event.preventDefault()
+      depth.current += 1
+      setOver(true)
+    },
+    onDragOver(event: DragEvent) {
+      if (!carriesFiles(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = "copy"
+    },
+    onDragLeave(event: DragEvent) {
+      if (!carriesFiles(event)) return
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setOver(false)
+    },
+    onDrop(event: DragEvent) {
+      if (!carriesFiles(event)) return
+      event.preventDefault()
+      depth.current = 0
+      setOver(false)
+      const file = Array.from(event.dataTransfer.files).at(0)
+      const input = inputRef.current
+      if (!file || !input) return
+      if (!IMAGE_TYPES.includes(file.type)) {
+        setRejected(
+          `${file.name} isn't a supported image. Drop a PNG, JPEG, WebP, or AVIF.`
+        )
+        return
+      }
+      setRejected(null)
+      assignInputFile(input, file)
+      onFile(file)
+    },
+  }
+
+  return { over, rejected, clearRejected: () => setRejected(null), handlers }
+}
+
+function DropOverlay({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-sm font-medium text-primary backdrop-blur-[1px]">
+      {label}
+    </div>
+  )
 }
 
 function EditNote({
@@ -280,6 +358,11 @@ export function ReceiptImagePicker({
     height: number
   } | null>(null)
   const [zoom, setZoom] = useState<"receipt" | "bill" | null>(null)
+  const receiptDrop = useImageDrop(ocrInputRef, (file) => {
+    setReceiptDims(null)
+    receipt.setFile(file)
+  })
+  const billDrop = useImageDrop(billInputRef, (file) => bill.setFile(file))
 
   return (
     <div className="space-y-3">
@@ -295,6 +378,7 @@ export function ReceiptImagePicker({
         className="sr-only"
         onChange={(event) => {
           setReceiptDims(null)
+          receiptDrop.clearRejected()
           receipt.setFile(event.target.files?.[0] ?? null)
         }}
       />
@@ -308,7 +392,10 @@ export function ReceiptImagePicker({
         ref={billInputRef}
         accept={IMAGE_ACCEPT}
         className="sr-only"
-        onChange={(event) => bill.setFile(event.target.files?.[0] ?? null)}
+        onChange={(event) => {
+          billDrop.clearRejected()
+          bill.setFile(event.target.files?.[0] ?? null)
+        }}
       />
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -405,7 +492,12 @@ export function ReceiptImagePicker({
               </div>
             )}
             {separateBillImage && (
-              <div className="flex items-center justify-between gap-2 pl-6">
+              <div
+                data-testid="bill-drop-zone"
+                className="relative ml-6 flex items-center justify-between gap-2 rounded-md"
+                {...billDrop.handlers}
+              >
+                {billDrop.over && <DropOverlay label="Drop bill image" />}
                 <span className="truncate text-xs text-muted-foreground">
                   {bill.file
                     ? `${bill.file.name} · ${fmtBytes(bill.file.size)}`
@@ -458,10 +550,28 @@ export function ReceiptImagePicker({
                 </span>
               </div>
             )}
+            {separateBillImage && billDrop.rejected && (
+              <p role="alert" className="pl-6 text-xs text-destructive">
+                {billDrop.rejected}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="space-y-1">
+        <div
+          data-testid="receipt-drop-zone"
+          className="relative space-y-1"
+          {...receiptDrop.handlers}
+        >
+          {receiptDrop.over && (
+            <DropOverlay
+              label={
+                receipt.file
+                  ? "Drop to replace the photo"
+                  : "Drop the receipt photo"
+              }
+            />
+          )}
           {receipt.shownUrl ? (
             <button
               type="button"
@@ -499,8 +609,8 @@ export function ReceiptImagePicker({
               <ImageSquareIcon className="size-6 text-muted-foreground" />
               <span className="text-sm font-medium">No photo yet</span>
               <span className="text-xs text-muted-foreground">
-                Pick the receipt photo — the preview opens here. Click it to
-                zoom.
+                Pick or drop the receipt photo — the preview opens here. Click
+                it to zoom.
               </span>
             </button>
           )}
@@ -509,6 +619,11 @@ export function ReceiptImagePicker({
               ? "Click the photo to view it fullscreen — portrait receipts read best there."
               : "PNG, JPEG, WebP, or AVIF up to 15 MiB and 40 MP."}
           </p>
+          {receiptDrop.rejected && (
+            <p role="alert" className="text-xs text-destructive">
+              {receiptDrop.rejected}
+            </p>
+          )}
           {separateBillImage && bill.shownUrl && (
             <button
               type="button"

@@ -145,3 +145,55 @@ test("a hand edit with a crop summarises both edits", () => {
   ).toBeTruthy()
   expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy()
 })
+
+// happy-dom's DataTransfer only takes its own File class, but the preload
+// restores Bun's. A tiny stand-in keeps the drop path under test.
+globalThis.DataTransfer = class {
+  private list: File[] = []
+  items = { add: (file: File) => void this.list.push(file) }
+  get files() {
+    return this.list as unknown as FileList
+  }
+} as unknown as typeof DataTransfer
+
+function dropOn(zone: HTMLElement, file: File) {
+  const dataTransfer = { types: ["Files"], files: [file], dropEffect: "none" }
+  fireEvent.dragEnter(zone, { dataTransfer })
+  fireEvent.drop(zone, { dataTransfer })
+}
+
+test("dropping an image on the preview fills the receipt input", () => {
+  render(<PickerHarness />)
+  const file = new File(["fake-png-bytes"], "dropped.png", {
+    type: "image/png",
+  })
+  dropOn(screen.getByTestId("receipt-drop-zone"), file)
+
+  const input = screen.getByLabelText("Receipt image") as HTMLInputElement
+  expect(input.files?.[0]).toBe(file)
+  expect(screen.getByAltText("Receipt image preview")).toBeTruthy()
+  expect(screen.getByText("dropped.png")).toBeTruthy()
+})
+
+test("dropping a non-image on the preview is rejected", () => {
+  render(<PickerHarness />)
+  const file = new File(["%PDF"], "receipt.pdf", { type: "application/pdf" })
+  dropOn(screen.getByTestId("receipt-drop-zone"), file)
+
+  const input = screen.getByLabelText("Receipt image") as HTMLInputElement
+  expect(input.files?.length ?? 0).toBe(0)
+  expect(screen.getByRole("alert").textContent).toContain("receipt.pdf")
+  expect(screen.getByText("No photo")).toBeTruthy()
+})
+
+test("dropping an image on the bill row fills the bill input", () => {
+  render(<PickerHarness separateBillImage />)
+  const file = new File(["fake-png-bytes"], "bill.webp", {
+    type: "image/webp",
+  })
+  dropOn(screen.getByTestId("bill-drop-zone"), file)
+
+  const input = screen.getByLabelText("Bill image") as HTMLInputElement
+  expect(input.files?.[0]).toBe(file)
+  expect(screen.getByAltText("Bill image preview")).toBeTruthy()
+})
