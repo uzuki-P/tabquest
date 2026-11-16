@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form"
 import { CheckIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { PersonAvatar } from "@/components/person-avatar"
 import { Button } from "@/components/ui/button"
@@ -575,13 +575,37 @@ export function AdjustmentsSection({ form }: { form: BillFormApi }) {
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            Amounts are signed — discounts negative. They split proportionally
-            by each person&apos;s item share.
+            Amounts are signed — discounts negative. Discounts and tax split by
+            each person&apos;s item share; other fees split equally. The player
+            marked &ldquo;takes rounding&rdquo; pays leftover rupiah.
           </p>
         </div>
       )}
     </form.Field>
   )
+}
+
+/** The directory player flagged to take rounding, so the preview matches publish. */
+function useRoundingPlayerId(): string | null {
+  const [id, setId] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/admin/players")
+      .then((response) => (response.ok ? response.json() : { players: [] }))
+      .then(
+        (body: {
+          players?: Array<{ id: string; takesRounding?: boolean }>
+        }) => {
+          if (!cancelled)
+            setId(body.players?.find((p) => p.takesRounding)?.id ?? null)
+        }
+      )
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return id
 }
 
 function ReviewBody({
@@ -591,7 +615,11 @@ function ReviewBody({
   value: BillFormValue
   matrix: AllocationMatrix
 }) {
-  const preview = useMemo(() => previewSplit(value, matrix), [value, matrix])
+  const roundingPlayerId = useRoundingPlayerId()
+  const preview = useMemo(
+    () => previewSplit(value, matrix, roundingPlayerId),
+    [value, matrix, roundingPlayerId]
+  )
 
   if (preview.formIssues.length > 0) {
     return (
@@ -715,7 +743,7 @@ export function AdjustmentSummary({ form }: { form: BillFormApi }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-medium">Order adjustments</h3>
             <p className="text-xs text-muted-foreground">
-              Split proportionally by each person&apos;s item share.
+              Discounts and tax split by item share; other fees equally.
             </p>
           </div>
           {value.adjustments.length === 0 ? (

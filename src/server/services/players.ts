@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, like } from "drizzle-orm"
+import { and, eq, inArray, isNull, like, ne } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { Data, Effect } from "effect"
 
@@ -76,11 +76,21 @@ export function updatePlayer(
     // PATCH semantics: absent fields keep their value, empty strings clear.
     const updated = yield* tryDb(() =>
       deps.db.transaction(async (tx) => {
+        // Only one player takes rounding, so claiming it clears the others.
+        if (input.takesRounding)
+          await tx
+            .update(players)
+            .set({ takesRounding: false })
+            .where(
+              and(eq(players.takesRounding, true), ne(players.id, playerId))
+            )
+            .run()
         const result = await tx
           .update(players)
           .set({
             name: input.name,
             note: mergeOptionalText(input.note, existing.note),
+            takesRounding: input.takesRounding ?? existing.takesRounding,
             updatedAt: nowUtcIso(),
           })
           .where(eq(players.id, playerId))

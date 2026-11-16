@@ -4,6 +4,7 @@ import { formatRupiah, isSafeRupiah } from "./money"
 import {
   allocateProportional,
   computeSplit,
+  roundingBillPlayerId,
   SplitValidationError,
 } from "./split"
 import type { SplitInput } from "./split"
@@ -144,6 +145,20 @@ describe("allocateProportional", () => {
     ])
   })
 
+  test("hands the whole leftover to a rounding billPlayer with weight", () => {
+    const weights = [
+      { billPlayerId: "a", weight: 1 },
+      { billPlayerId: "b", weight: 1 },
+      { billPlayerId: "c", weight: 1 },
+    ]
+    expect(
+      allocateProportional(100, weights, "c").map((r) => r.amount)
+    ).toEqual([33, 33, 34])
+    expect(
+      allocateProportional(-100, weights, "a").map((r) => r.amount)
+    ).toEqual([-32, -34, -34])
+  })
+
   test("rejects non-zero amounts with an all-zero total weight", () => {
     expect(() =>
       allocateProportional(1, [{ billPlayerId: "a", weight: 0 }])
@@ -152,8 +167,97 @@ describe("allocateProportional", () => {
 })
 
 describe("computeSplit", () => {
-  test("reconciles the supplied example order exactly", () => {
+  test("splits fees equally and discounts by item share", () => {
     const result = computeSplit(exampleBill())
+    const byId = Object.fromEntries(
+      result.shares.map((s) => [s.billPlayerId, s])
+    )
+    const share = (p: string, adj: string) =>
+      byId[p].adjustmentShares.find((s) => s.adjustmentId === adj)!.amount
+
+    expect(
+      ["p-raka", "p-sinta", "p-dewi"].map((p) => share(p, "adj-voucher"))
+    ).toEqual([-35100, -35550, -32850])
+    expect(
+      ["p-raka", "p-sinta", "p-dewi"].map((p) => share(p, "adj-delivery"))
+    ).toEqual([667, 667, 666])
+    expect(
+      ["p-raka", "p-sinta", "p-dewi"].map((p) => share(p, "adj-service"))
+    ).toEqual([834, 833, 833])
+    expect(result.shares.map((s) => s.total)).toEqual([44401, 44950, 41649])
+    expect(result.shares.reduce((sum, s) => sum + s.total, 0)).toBe(131000)
+  })
+
+  test("splits tax by item share and flat fees per head by adjustment type", () => {
+    const result = computeSplit({
+      ...exampleBill(),
+      adjustments: [
+        { id: "adj-voucher", type: "discount", amount: -103500 },
+        { id: "adj-tax", type: "tax", amount: 2000 },
+        { id: "adj-service", type: "service", amount: 2500 },
+      ],
+    })
+    const share = (adj: string) =>
+      result.shares.map(
+        (s) => s.adjustmentShares.find((a) => a.adjustmentId === adj)!.amount
+      )
+    expect(share("adj-tax")).toEqual([678, 687, 635])
+    expect(share("adj-service")).toEqual([834, 833, 833])
+  })
+
+  test("gives leftover rounding rupiah to the rounding billPlayer", () => {
+    const result = computeSplit({
+      ...exampleBill(),
+      roundingBillPlayerId: "p-dewi",
+    })
+    const share = (adj: string) =>
+      result.shares.map(
+        (s) => s.adjustmentShares.find((a) => a.adjustmentId === adj)!.amount
+      )
+    expect(share("adj-delivery")).toEqual([666, 666, 668])
+    expect(share("adj-service")).toEqual([833, 833, 834])
+    expect(share("adj-voucher")).toEqual([-35100, -35550, -32850])
+    expect(result.shares.reduce((sum, s) => sum + s.total, 0)).toBe(131000)
+  })
+
+  test("falls back to largest remainder when the rounding billPlayer is not on the adjustment", () => {
+    const input = exampleBill()
+    const result = computeSplit({
+      ...input,
+      billPlayers: [...input.billPlayers, { id: "p-admin" }],
+      roundingBillPlayerId: "p-admin",
+    })
+    const admin = result.shares.find((s) => s.billPlayerId === "p-admin")!
+    expect(admin.total).toBe(0)
+    expect(result.shares.map((s) => s.total)).toEqual([44401, 44950, 41649, 0])
+  })
+
+  test("maps the rounding directory player to their billPlayer", () => {
+    const billPlayers = [
+      { id: "a", playerId: "dir-1" },
+      { id: "b", playerId: "dir-2" },
+    ]
+    expect(roundingBillPlayerId(billPlayers, "dir-2")).toBe("b")
+    expect(roundingBillPlayerId(billPlayers, "dir-9")).toBeUndefined()
+    expect(roundingBillPlayerId(billPlayers, null)).toBeUndefined()
+  })
+
+  test("leaves fees off players who ordered nothing", () => {
+    const input = exampleBill()
+    const result = computeSplit({
+      ...input,
+      billPlayers: [...input.billPlayers, { id: "p-empty" }],
+    })
+    const empty = result.shares.find((s) => s.billPlayerId === "p-empty")!
+    expect(empty.total).toBe(0)
+    expect(result.shares.reduce((sum, s) => sum + s.total, 0)).toBe(131000)
+  })
+
+  test("reconciles the supplied example order exactly with legacy proportional fees", () => {
+    const result = computeSplit({
+      ...exampleBill(),
+      splitVersion: 1,
+    })
 
     expect(result.itemSubtotal).toBe(230000)
     expect(result.adjustmentsTotal).toBe(-99000)
@@ -455,7 +559,7 @@ describe("items per qty", () => {
     bill.finalTotal = 88000
     const split = computeSplit(bill)
     expect(split.shares.map((p) => p.itemSubtotal)).toEqual([42500, 37500])
-    expect(split.shares.map((p) => p.total)).toEqual([46750, 41250])
+    expect(split.shares.map((p) => p.total)).toEqual([46500, 41500])
   })
 
   test("requires allocations to match qty x items per qty and the line total to match qty x unit price", () => {

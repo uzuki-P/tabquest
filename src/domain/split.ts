@@ -1,11 +1,15 @@
 /**
  * Framework-independent split-bill calculation.
  *
- * Money is integer rupiah everywhere. All order-wide adjustments (discounts,
- * delivery, service, tax, other fees) are allocated proportionally to each
- * billPlayer's pre-adjustment item subtotal, using a deterministic
- * largest-remainder rounding so recomputing a published bill always produces
- * the same totals.
+ * Money is integer rupiah everywhere. Discounts and tax follow each
+ * billPlayer's pre-adjustment item subtotal. Flat order fees (delivery,
+ * service, other) split equally among the billPlayers who ordered. Leftover
+ * rupiah from rounding go to the rounding billPlayer (the admin) when they
+ * share the adjustment, otherwise by deterministic largest remainder, so
+ * recomputing a published bill always produces the same totals.
+ *
+ * Split rules are versioned per bill: version 1 bills (published before these
+ * rules) split every adjustment by item share with largest-remainder rounding.
  */
 
 import { isSafeRupiah } from "./money"
@@ -50,8 +54,28 @@ export function allocateItemCost(
 
 export interface SplitAdjustment {
   id: string
+  /** discount | delivery | service | tax | other */
+  type?: string
   /** Signed amount: discounts negative, fees positive. */
   amount: number
+}
+
+/** Adjustment types that scale with what each person bought. */
+const PROPORTIONAL_ADJUSTMENT_TYPES = new Set(["discount", "tax"])
+
+/** True when the adjustment splits per head rather than by item share. */
+export function splitsEqually(adjustment: SplitAdjustment): boolean {
+  if (adjustment.type === undefined) return adjustment.amount > 0
+  return !PROPORTIONAL_ADJUSTMENT_TYPES.has(adjustment.type)
+}
+
+/** The billPlayer linked to the directory player who takes rounding. */
+export function roundingBillPlayerId(
+  billPlayers: ReadonlyArray<{ id: string; playerId: string | null }>,
+  roundingPlayerId: string | null | undefined
+): string | undefined {
+  if (!roundingPlayerId) return undefined
+  return billPlayers.find((p) => p.playerId === roundingPlayerId)?.id
 }
 
 export interface SplitAllocation {
@@ -60,6 +84,9 @@ export interface SplitAllocation {
   /** Integer quantity of the item assigned to the billPlayer, at least 1. */
   quantity: number
 }
+
+/** 1: every adjustment by item share. 2: equal fees and rounding to admin. */
+export type SplitVersion = 1 | 2
 
 export interface SplitInput {
   items: SplitItem[]
@@ -70,6 +97,10 @@ export interface SplitInput {
   sourceSubtotal: number
   /** Final amount charged by the merchant. */
   finalTotal: number
+  /** Defaults to the current rules, 2. */
+  splitVersion?: SplitVersion
+  /** Takes leftover rounding rupiah on adjustments they share (version 2). */
+  roundingBillPlayerId?: string
 }
 
 export type SplitIssue =
@@ -151,11 +182,14 @@ interface WeightedBillPlayer {
  * products of two safe integers never lose precision.
  *
  * Ties in the fractional remainder are broken by billPlayer order, so the
- * same input always produces the same rupiah assignment.
+ * same input always produces the same rupiah assignment. When
+ * `roundingId` names a billPlayer with a positive weight, that
+ * billPlayer takes the whole leftover instead.
  */
 export function allocateProportional(
   amount: number,
-  billPlayers: ReadonlyArray<WeightedBillPlayer>
+  billPlayers: ReadonlyArray<WeightedBillPlayer>,
+  roundingId?: string
 ): Array<{ billPlayerId: string; amount: number }> {
   if (amount === 0) {
     return billPlayers.map((p) => ({
@@ -183,6 +217,14 @@ export function allocateProportional(
 
   const assignedTotal = rows.reduce((sum, row) => sum + row.base, 0n)
   let leftover = bigAmount - assignedTotal
+  const absorber = rows.find(
+    (row) =>
+      row.billPlayerId === roundingId && billPlayers[row.index].weight > 0
+  )
+  if (leftover !== 0n && absorber) {
+    absorber.base += leftover
+    leftover = 0n
+  }
   if (leftover !== 0n) {
     const step = leftover > 0n ? 1n : -1n
     const order = [...rows].sort((a, b) => {
@@ -393,6 +435,15 @@ export function computeSplit(input: SplitInput): SplitResult {
     weight: itemSubtotalByBillPlayer.get(p.id) ?? 0,
   }))
 
+  const legacy = input.splitVersion === 1
+  // Flat fees split per head among billPlayers who ordered something.
+  const ordered = new Set(input.allocations.map((a) => a.billPlayerId))
+  const perHead: WeightedBillPlayer[] = input.billPlayers.map((p) => ({
+    billPlayerId: p.id,
+    weight: ordered.has(p.id) ? 1 : 0,
+  }))
+  const roundingId = legacy ? undefined : input.roundingBillPlayerId
+
   const shares: BillPlayerShare[] = input.billPlayers.map((p) => {
     const itemSubtotalForP = itemSubtotalByBillPlayer.get(p.id) ?? 0
     return {
@@ -406,7 +457,11 @@ export function computeSplit(input: SplitInput): SplitResult {
   const shareByBillPlayer = new Map(shares.map((s) => [s.billPlayerId, s]))
 
   for (const adjustment of input.adjustments) {
-    const allocation = allocateProportional(adjustment.amount, weights)
+    const allocation = allocateProportional(
+      adjustment.amount,
+      !legacy && splitsEqually(adjustment) ? perHead : weights,
+      roundingId
+    )
     for (const { billPlayerId, amount } of allocation) {
       shareByBillPlayer
         .get(billPlayerId)!

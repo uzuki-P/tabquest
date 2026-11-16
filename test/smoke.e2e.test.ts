@@ -316,9 +316,9 @@ describe("production runtimes", () => {
     expect(
       Object.fromEntries(summaryBody.billPlayers.map((p) => [p.alias, p.total]))
     ).toEqual({
-      Raka: 44426,
-      Sinta: 44996,
-      Dewi: 41578,
+      Raka: 44401,
+      Sinta: 44950,
+      Dewi: 41649,
     })
     expect(summaryBody.billPlayers.every((p) => !p.paid)).toBe(true)
 

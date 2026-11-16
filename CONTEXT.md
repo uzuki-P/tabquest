@@ -12,7 +12,7 @@ _Avoid_: Customer, participant, user
 The whole receipt for one group order, divided among the players on it.
 
 **Split**:
-The amount a player owes on a bill, after their proportional share of any discount.
+The amount a player owes on a bill: their items, plus their proportional share of any discount and tax, plus an equal share of delivery, service, and other fees. Leftover rupiah from rounding go to the player marked as taking rounding (the admin) when they share that adjustment. Bills published before these rules (split version 1) keep every adjustment proportional.
 
 **Allocation**:
 A quantity of a bill item, or a share of a bill adjustment, assigned to one player on the bill. Allocations are the inputs a Split is computed from.

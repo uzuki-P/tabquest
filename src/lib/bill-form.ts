@@ -1,4 +1,9 @@
-import { itemUnits, computeSplit, SplitValidationError } from "@/domain/split"
+import {
+  itemUnits,
+  computeSplit,
+  roundingBillPlayerId,
+  SplitValidationError,
+} from "@/domain/split"
 import type { SplitInput, SplitIssue, SplitResult } from "@/domain/split"
 import { billStructureSchema, parseRupiahField } from "./bill-schema"
 import type { AdjustmentType, BillStructureInput } from "./bill-schema"
@@ -240,7 +245,10 @@ export function buildStructure(
   return { ok: true, issues: [], structure: parsed.data }
 }
 
-export function toSplitInput(structure: BillStructureInput): SplitInput {
+export function toSplitInput(
+  structure: BillStructureInput,
+  roundingPlayerId?: string | null
+): SplitInput {
   return {
     items: structure.items.map((item) => ({
       id: item.id,
@@ -254,10 +262,15 @@ export function toSplitInput(structure: BillStructureInput): SplitInput {
     allocations: structure.allocations,
     adjustments: structure.adjustments.map((a) => ({
       id: a.id,
+      type: a.type,
       amount: a.amount,
     })),
     sourceSubtotal: structure.header.sourceSubtotal,
     finalTotal: structure.header.finalTotal,
+    roundingBillPlayerId: roundingBillPlayerId(
+      structure.billPlayers,
+      roundingPlayerId
+    ),
   }
 }
 
@@ -270,7 +283,8 @@ export interface PreviewOutcome {
 /** Live client-side reconciliation preview using the domain module. */
 export function previewSplit(
   value: BillFormValue,
-  matrix: AllocationMatrix
+  matrix: AllocationMatrix,
+  roundingPlayerId?: string | null
 ): PreviewOutcome {
   const built = buildStructure(value, matrix)
   if (!built.ok || !built.structure) {
@@ -278,7 +292,7 @@ export function previewSplit(
   }
   try {
     return {
-      split: computeSplit(toSplitInput(built.structure)),
+      split: computeSplit(toSplitInput(built.structure, roundingPlayerId)),
       issues: [],
       formIssues: [],
     }

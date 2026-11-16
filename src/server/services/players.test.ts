@@ -33,6 +33,26 @@ async function runExpectError<TError>(
 }
 
 describe("player service", () => {
+  test("only one player takes rounding at a time", async () => {
+    const harness = await makeHarness()
+    const deps = { db: harness.db }
+    const a = await run(createPlayer(deps, { name: "A" }))
+    const b = await run(createPlayer(deps, { name: "B" }))
+    expect(a.takesRounding).toBe(false)
+
+    await run(updatePlayer(deps, a.id, { name: "A", takesRounding: true }))
+    await run(updatePlayer(deps, b.id, { name: "B", takesRounding: true }))
+    const flags = Object.fromEntries(
+      (await run(listPlayers(deps))).map((p) => [p.name, p.takesRounding])
+    )
+    expect(flags).toEqual({ A: false, B: true })
+
+    // Saving without the field keeps the flag.
+    const renamed = await run(updatePlayer(deps, b.id, { name: "Bee" }))
+    expect(renamed.takesRounding).toBe(true)
+    harness.cleanup()
+  })
+
   test("CRUD round-trip with archive and restore", async () => {
     const harness = await makeHarness()
     const deps = { db: harness.db }

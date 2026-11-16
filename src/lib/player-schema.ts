@@ -12,5 +12,8 @@ export const playerCreateSchema = z.object({
 })
 export type PlayerCreateInput = z.infer<typeof playerCreateSchema>
 
-export const playerUpdateSchema = playerCreateSchema
+export const playerUpdateSchema = playerCreateSchema.extend({
+  /** Absent keeps the stored value; true moves the flag to this player. */
+  takesRounding: z.boolean().optional(),
+})
 export type PlayerUpdateInput = z.infer<typeof playerUpdateSchema>

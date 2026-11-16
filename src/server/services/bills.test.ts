@@ -1,6 +1,9 @@
 import type { InArgs } from "@libsql/client"
 import { describe, expect, test } from "bun:test"
+import { eq } from "drizzle-orm"
 import { Effect } from "effect"
+
+import { bills } from "@/db/schema"
 
 import {
   archiveBill,
@@ -20,7 +23,7 @@ import {
   unpublishBill,
 } from "./bills"
 import { setPaymentState } from "./payments"
-import { createPlayer } from "./players"
+import { createPlayer, updatePlayer } from "./players"
 import {
   createExamplePlayers,
   exampleStructure,
@@ -84,9 +87,9 @@ describe("bill service", () => {
         .map((a) => [a.billPlayerId, a.signedAmount])
     )
     expect(deliveryShares).toEqual({
-      "p-raka": 678,
-      "p-sinta": 687,
-      "p-dewi": 635,
+      "p-raka": 667,
+      "p-sinta": 667,
+      "p-dewi": 666,
     })
 
     expect(afterPublish.paymentStatuses).toHaveLength(3)
@@ -311,6 +314,75 @@ describe("bill service", () => {
     harness.cleanup()
   })
 
+  test("the player who takes rounding pays the leftover rupiah", async () => {
+    const harness = await makeHarness()
+    const deps = { db: harness.db }
+    const examplePlayers = await createExamplePlayers(deps)
+    await run(
+      updatePlayer(deps, examplePlayers.dewi, {
+        name: "Dewi",
+        takesRounding: true,
+      })
+    )
+    const structure = exampleStructure(examplePlayers)
+    const bill = await run(createBill(deps, structure.header, fakeImage))
+    await run(saveStructure(deps, bill.id, structure))
+    await run(publishBill(deps, bill.id))
+
+    const detail = await run(getBillDetail(deps, bill.id))
+    const delivery = Object.fromEntries(
+      detail.adjustmentAllocations
+        .filter((a) => a.adjustmentId === "adj-delivery")
+        .map((a) => [a.billPlayerId, a.signedAmount])
+    )
+    expect(delivery).toEqual({ "p-raka": 666, "p-sinta": 666, "p-dewi": 668 })
+    const totals = async () =>
+      (await run(getPublishedBill(deps, bill.publicId))).billPlayers.map(
+        (p) => p.total
+      )
+    const published = await totals()
+    expect(published.reduce((sum, t) => sum + t, 0)).toBe(131000)
+
+    // Moving the flag later leaves the published bill's totals alone.
+    await run(
+      updatePlayer(deps, examplePlayers.raka, {
+        name: "Raka",
+        takesRounding: true,
+      })
+    )
+    expect(await totals()).toEqual(published)
+    harness.cleanup()
+  })
+
+  test("version 1 bills keep proportional fees until unpublished", async () => {
+    const harness = await makeHarness()
+    const deps = { db: harness.db }
+    const structure = exampleStructure(await createExamplePlayers(deps))
+    const bill = await run(createBill(deps, structure.header, fakeImage))
+    expect(bill.splitVersion).toBe(2)
+    await run(saveStructure(deps, bill.id, structure))
+    await run(publishBill(deps, bill.id))
+    await harness.db
+      .update(bills)
+      .set({ splitVersion: 1 })
+      .where(eq(bills.id, bill.id))
+      .run()
+
+    const totals = async () =>
+      Object.fromEntries(
+        (await run(getPublishedBill(deps, bill.publicId))).billPlayers.map(
+          (p) => [p.alias, p.total]
+        )
+      )
+    expect(await totals()).toEqual({ Raka: 44426, Sinta: 44996, Dewi: 41578 })
+
+    const unpublished = await run(unpublishBill(deps, bill.id))
+    expect(unpublished.splitVersion).toBe(2)
+    await run(publishBill(deps, bill.id))
+    expect(await totals()).toEqual({ Raka: 44401, Sinta: 44950, Dewi: 41649 })
+    harness.cleanup()
+  })
+
   test("public view exposes aliases, shares, and payment state only", async () => {
     const harness = await makeHarness()
     const deps = { db: harness.db }
@@ -325,7 +397,7 @@ describe("bill service", () => {
     const totals = Object.fromEntries(
       view.billPlayers.map((p) => [p.alias, p.total])
     )
-    expect(totals).toEqual({ Raka: 44426, Sinta: 44996, Dewi: 41578 })
+    expect(totals).toEqual({ Raka: 44401, Sinta: 44950, Dewi: 41649 })
     expect(view.billPlayers.every((p) => p.paid === false)).toBe(true)
     expect(view.imageAvailable).toBe(true)
 

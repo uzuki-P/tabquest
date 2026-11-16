@@ -35,6 +35,18 @@ export const bills = sqliteTable(
     publishedAt: text("published_at"),
     /** Set when the bill is archived; archive hides it from lists only. */
     archivedAt: text("archived_at"),
+    /**
+     * Split rules the bill was published under (see src/domain/split.ts).
+     * 1: every adjustment by item share. 2: flat fees per head, rounding to
+     * the admin. Drafts and new bills use the current rules.
+     */
+    splitVersion: integer("split_version").notNull().default(2),
+    /**
+     * billPlayer who took leftover rounding rupiah, fixed at publish so
+     * moving the players' "takes rounding" flag never changes a published
+     * bill. Null on drafts, which follow the live flag.
+     */
+    roundingBillPlayerId: text("rounding_bill_player_id"),
   },
   (t) => [
     index("bills_order_date_idx").on(t.orderDate),
@@ -55,6 +67,10 @@ export const players = sqliteTable(
     phone: text("phone"),
     note: text("note"),
     archivedAt: text("archived_at"),
+    /** The admin: takes leftover rounding rupiah. At most one player. */
+    takesRounding: integer("takes_rounding", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

@@ -24,6 +24,7 @@ import type {
 import {
   allocateItemCost,
   computeSplit,
+  roundingBillPlayerId,
   SplitValidationError,
 } from "@/domain/split"
 import type { SplitInput, SplitIssue, SplitResult } from "@/domain/split"
@@ -82,6 +83,8 @@ export interface BillDetail {
   allocations: ItemAllocationRow[]
   adjustmentAllocations: AdjustmentAllocationRow[]
   paymentStatuses: PaymentStatusRow[]
+  /** Directory player who takes leftover rounding rupiah, if any. */
+  roundingPlayerId: string | null
   split: SplitResult | null
   splitIssues: SplitIssue[]
 }
@@ -163,10 +166,16 @@ export function toSplitInput(
     })),
     adjustments: detail.adjustments.map((a) => ({
       id: a.id,
+      type: a.type,
       amount: a.signedAmount,
     })),
     sourceSubtotal: detail.bill.sourceSubtotal,
     finalTotal: detail.bill.finalTotal,
+    splitVersion: detail.bill.splitVersion === 1 ? 1 : 2,
+    roundingBillPlayerId:
+      detail.bill.status === "published"
+        ? (detail.bill.roundingBillPlayerId ?? undefined)
+        : roundingBillPlayerId(detail.billPlayers, detail.roundingPlayerId),
   }
 }
 
@@ -541,6 +550,14 @@ function loadDetailRows(deps: BillDeps, billId: string) {
       allocations: allocationRows,
       adjustmentAllocations: adjustmentAllocationRows,
       paymentStatuses: statusRows,
+      roundingPlayerId:
+        (
+          await tx
+            .select({ id: players.id })
+            .from(players)
+            .where(eq(players.takesRounding, true))
+            .get()
+        )?.id ?? null,
     }
   })
 }
@@ -614,7 +631,15 @@ export function publishBill(
 
         await tx
           .update(bills)
-          .set({ status: "published", publishedAt: now, updatedAt: now })
+          .set({
+            status: "published",
+            publishedAt: now,
+            updatedAt: now,
+            // Freeze who takes rounding so later flag moves keep these totals.
+            roundingBillPlayerId:
+              roundingBillPlayerId(rows.billPlayers, rows.roundingPlayerId) ??
+              null,
+          })
           .where(eq(bills.id, billId))
           .run()
 
@@ -676,7 +701,14 @@ export function unpublishBill(
         }
         await tx
           .update(bills)
-          .set({ status: "draft", publishedAt: null, updatedAt: now })
+          .set({
+            status: "draft",
+            publishedAt: null,
+            updatedAt: now,
+            // The editor previews the current rules, so republishing uses them.
+            splitVersion: 2,
+            roundingBillPlayerId: null,
+          })
           .where(eq(bills.id, billId))
           .run()
         await refreshPlayerHoverSummaries(tx)

@@ -44,6 +44,7 @@ interface PlayerRowView {
   name: string
   note: string | null
   archivedAt: string | null
+  takesRounding: boolean
 }
 
 const fetchAdminPlayers = createServerFn({ method: "GET" })
@@ -413,9 +414,10 @@ function PlayersPage() {
 
       <p className="mt-4 text-xs text-muted-foreground">
         Discounts are split proportionally to each person&apos;s share of the
-        item subtotal, so everyone on one bill sees the same discount rate.
-        Differences between players come from which bills they join, not from
-        per-player pricing.
+        item subtotal, so everyone on one bill sees the same discount rate. Tax
+        follows the same share; delivery, service, and other fees are split
+        equally between everyone who ordered. Differences between players come
+        from which bills they join, not from per-player pricing.
       </p>
 
       <ConfirmDialog
@@ -507,7 +509,11 @@ function PlayerRow({
   insight?: PlayerInsight
   outstanding: number
   busy: boolean
-  onSave: (input: { name: string; note?: string }) => void
+  onSave: (input: {
+    name: string
+    note?: string
+    takesRounding?: boolean
+  }) => void
   onToggleArchive: () => void
   onDelete: () => void
   onCollect: () => void
@@ -515,6 +521,7 @@ function PlayerRow({
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(player.name)
   const [note, setNote] = useState(player.note ?? "")
+  const [takesRounding, setTakesRounding] = useState(player.takesRounding)
 
   if (editing) {
     return (
@@ -534,7 +541,18 @@ function PlayerRow({
             onChange={(event) => setNote(event.target.value)}
           />
         </TableCell>
-        <TableCell colSpan={4} />
+        <TableCell colSpan={4}>
+          <div className="flex items-center gap-2">
+            <Switch
+              id={`takes-rounding-${player.id}`}
+              checked={takesRounding}
+              onCheckedChange={setTakesRounding}
+            />
+            <Label htmlFor={`takes-rounding-${player.id}`} className="text-sm">
+              Takes rounding
+            </Label>
+          </div>
+        </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end gap-1">
             <Button
@@ -544,6 +562,7 @@ function PlayerRow({
                 onSave({
                   name: name.trim(),
                   note: note.trim(),
+                  takesRounding,
                 })
                 setEditing(false)
               }}
@@ -556,6 +575,7 @@ function PlayerRow({
               onClick={() => {
                 setName(player.name)
                 setNote(player.note ?? "")
+                setTakesRounding(player.takesRounding)
                 setEditing(false)
               }}
             >
@@ -574,6 +594,15 @@ function PlayerRow({
         {player.archivedAt && (
           <Badge variant="outline" className="ml-2">
             archived
+          </Badge>
+        )}
+        {player.takesRounding && (
+          <Badge
+            variant="outline"
+            className="ml-2"
+            title="Pays leftover rupiah from rounding on bills they join"
+          >
+            rounding
           </Badge>
         )}
       </TableCell>
